@@ -1,0 +1,81 @@
+GENERAL_01:
+  severity: significant
+  recommendation: "В начале звонка представляйтесь: имя, роль и СберПервый."
+GENERAL_02:
+  severity: minor
+  recommendation: "Начинайте коммуникацию с краткого вежливого приветствия."
+GENERAL_03:
+  severity: significant
+  recommendation: "В первые реплики кратко озвучивайте цель звонка."
+GENERAL_06:
+  severity: critical
+  recommendation: "Используйте нейтральный профессиональный язык."
+GENERAL_07:
+  severity: significant
+  recommendation: "Не давите на клиента; сначала выясните потребность."
+GENERAL_08:
+  severity: significant
+  recommendation: "Не просите клиента о положительной оценке."
+GENERAL_09:
+  severity: significant
+  recommendation: "Используйте только официальные каналы банка."
+GENERAL_10:
+  severity: significant
+  recommendation: "Сначала признайте возражение, затем отвечайте по существу."
+GENERAL_11:
+  severity: minor
+  recommendation: "После важных объяснений проверяйте понимание клиента."
+GENERAL_13:
+  severity: significant
+  recommendation: "Сравнивайте предложения по фактам без критики конкурентов."
+GENERAL_14:
+  severity: minor
+  recommendation: "Стройте разговор последовательно: запрос, решение, итог."
+GENERAL_15:
+  severity: significant
+  recommendation: "На прямые вопросы отвечайте прямо."
+GENERAL_17:
+  severity: significant
+  recommendation: "Перед запросом данных объясняйте цель."
+GENERAL_19:
+  severity: significant
+  recommendation: "При жалобе признайте неудобство и обозначьте решение."
+GENERAL_21:
+  severity: significant
+  recommendation: "В финале подведите итог и зафиксируйте следующий шаг."
+GENERAL_22:
+  severity: minor
+  recommendation: "Озвучьте формат и срок отправки итогов коммуникации."
+GENERAL_26:
+  severity: minor
+  recommendation: "Сравнивайте предложения по ключевым рыночным параметрам."
+GENERAL_29:
+  severity: critical
+  recommendation: "Не говорите о некомпетентности; возьмите уточнение в работу."
+GENERAL_30:
+  severity: minor
+  recommendation: "Сначала проверяйте возможность дистанционного решения."
+GENERAL_31:
+  severity: significant
+  recommendation: "При раздражении клиента сначала признайте эмоцию."
+GENERAL_44:
+  severity: minor
+  recommendation: "Учитывайте опыт клиента и адаптируйте объяснение."
+GENERAL_45:
+  severity: significant
+  recommendation: "Уважайте предпочтительный канал клиента."
+GENERAL_46:
+  severity: minor
+  recommendation: "После просьбы клиента перестраивайте форму обращения."
+GENERAL_49:
+  severity: critical
+  recommendation: "Снижайте напряжение к финалу разговора."
+GENERAL_50:
+  severity: critical
+  recommendation: "Укрепляйте доверие прозрачными объяснениями."
+GENERAL_51:
+  severity: critical
+  recommendation: "В конце убирайте неопределённость следующим шагом."
+GENERAL_52:
+  severity: critical
+  recommendation: "Показывайте ценность разговора конкретным итогом."

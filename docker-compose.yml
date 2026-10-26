@@ -1,0 +1,229 @@
+name: nextgen-refactor
+
+services:
+  postgres:
+    build:
+      context: ./postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-quality}
+      POSTGRES_USER: ${POSTGRES_USER:-quality}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quality}
+    ports:
+      - "${POSTGRES_HOST_PORT:-55432}:5432"
+    volumes:
+      - quality-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-quality} -d ${POSTGRES_DB:-quality}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  kafka:
+    image: apache/kafka:4.3.1
+    ports:
+      - "9092:9092"
+    volumes:
+      - quality-kafka:/var/lib/kafka/data
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:29092 --list >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+
+  kafka-init:
+    image: apache/kafka:4.3.1
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - >-
+        /opt/kafka/bin/kafka-topics.sh
+        --bootstrap-server kafka:29092
+        --create --if-not-exists
+        --topic ${KAFKA_TOPIC:-salute-speech}
+        --partitions 1
+        --replication-factor 1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: "no"
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - quality-ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+    restart: unless-stopped
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    entrypoint: ["/bin/ollama"]
+    command: ["pull", "${OLLAMA_MODEL:-qwen3:4b-instruct}"]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
+  ucp-mock:
+    build:
+      context: ./ucp-mock
+    ports:
+      - "8084:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8080), 2).close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  analyzer:
+    build:
+      context: ./analyzer
+    env_file: .env
+    environment:
+      DB_USER: ${POSTGRES_USER:-quality}
+      DB_PASS: ${POSTGRES_PASSWORD:-quality}
+      DB_NAME: ${POSTGRES_DB:-quality}
+      POSTGRES_HOSTS: postgres:5432
+      POSTGRES_DSN: ""
+      LLM_PROVIDER: ollama
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b-instruct}
+      ACTIVE_CRITERIA_CODES: ${ACTIVE_CRITERIA_CODES:-GENERAL_01,GENERAL_02,GENERAL_03}
+      GIGACHAT_MAX_INPUT_TOKENS: ${LOCAL_LLM_MAX_INPUT_TOKENS:-8192}
+      GIGACHAT_PROMPT_RESERVE_TOKENS: 1000
+      GIGACHAT_OUTPUT_RESERVE_TOKENS: 2000
+      GIGACHAT_MAX_OUTPUT_TOKENS: 2000
+      GIGACHAT_TEMPERATURE: 0
+      CALENDAR_FILTER_ENABLED: "false"
+      WORKER_POLL_INTERVAL_SECONDS: 30
+      DIALOG_PIPELINE_CONCURRENCY: ${DIALOG_PIPELINE_CONCURRENCY:-10}
+      MIN_DIALOG_DURATION_SECONDS: ${MIN_DIALOG_DURATION_SECONDS:-50}
+      DEPOSIT_ANALYSIS_ENABLED: ${DEPOSIT_ANALYSIS_ENABLED:-true}
+      DASHBOARD_ENABLED: ${DASHBOARD_ENABLED:-true}
+      DASHBOARD_CRON_HOUR_UTC: ${DASHBOARD_CRON_HOUR_UTC:-18}
+      METRIC_ROLLING_WINDOW_DAYS: ${METRIC_ROLLING_WINDOW_DAYS:-30}
+      STRENGTH_MIN_PERCENT: ${STRENGTH_MIN_PERCENT:-80}
+      STRENGTHS_LIMIT: ${STRENGTHS_LIMIT:-3}
+      IMPROVEMENTS_LIMIT: ${IMPROVEMENTS_LIMIT:-3}
+      RISK_CLIENTS_LIMIT: ${RISK_CLIENTS_LIMIT:-4}
+      LATEST_COMMUNICATIONS_LIMIT: ${LATEST_COMMUNICATIONS_LIMIT:-5}
+      METRIC_FAILED_COMMUNICATIONS_LIMIT: ${METRIC_FAILED_COMMUNICATIONS_LIMIT:-3}
+      METRIC_WEEKLY_POINTS_LIMIT: ${METRIC_WEEKLY_POINTS_LIMIT:-4}
+      ANALYZED_MANAGER_IDS: ${ANALYZED_MANAGER_IDS:-00000001,00000002}
+      PROMPT_ANALYZER_MANAGER_IDS: ${PROMPT_ANALYZER_MANAGER_IDS:-00000001,00000002}
+      AUDIO_ANALYZER_MANAGER_IDS: ${AUDIO_ANALYZER_MANAGER_IDS:-}
+      FAQ_ANALYZER_MANAGER_IDS: ${FAQ_ANALYZER_MANAGER_IDS:-}
+      AUDIO_ANALYZER_URL: ${AUDIO_ANALYZER_URL:-}
+      FAQ_ANALYZER_URL: ${FAQ_ANALYZER_URL:-}
+    ports:
+      - "8082:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama-pull:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8080), 2).close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  data-cleaner:
+    build:
+      context: ./data-cleaner
+    env_file: .env
+    environment:
+      DB_USER: ${POSTGRES_USER:-quality}
+      DB_PASS: ${POSTGRES_PASSWORD:-quality}
+      DB_NAME: ${POSTGRES_DB:-quality}
+      POSTGRES_HOSTS: postgres:5432
+      POSTGRES_DSN: ""
+      UCP_BASE_URL: http://ucp-mock:8080
+      CLEANER_CALLBACK_URLS: '["http://analyzer:8080/internal/v1/dialogs/cleaned"]'
+      CLEANER_POLL_INTERVAL_SECONDS: 30
+      CLEANER_CALLBACK_TIMEOUT_SECONDS: 30
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ucp-mock:
+        condition: service_healthy
+      analyzer:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8080), 2).close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  kafka-consumer:
+    build:
+      context: ./kafka-consumer
+    env_file: .env
+    environment:
+      DB_USER: ${POSTGRES_USER:-quality}
+      DB_PASS: ${POSTGRES_PASSWORD:-quality}
+      DB_NAME: ${POSTGRES_DB:-quality}
+      POSTGRES_HOSTS: postgres:5432
+      POSTGRES_DSN: ""
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_TOPIC: ${KAFKA_TOPIC:-salute-speech}
+      CLEANER_BASE_URL: http://data-cleaner:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      data-cleaner:
+        condition: service_healthy
+    restart: unless-stopped
+
+  kafka-producer:
+    build:
+      context: ./kafka-producer
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_TOPIC: ${KAFKA_TOPIC:-salute-speech}
+    ports:
+      - "8083:8080"
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      kafka-consumer:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8080), 2).close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  quality-postgres:
+  quality-kafka:
+  quality-ollama:

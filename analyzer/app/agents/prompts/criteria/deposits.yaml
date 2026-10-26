@@ -1,0 +1,221 @@
+- code: DEPOSIT_TOPIC
+  block: deposit
+  title: Определение применимости проверки вкладов
+  description: Определяет, относится ли звонок к окончанию, переоформлению, пролонгации или предложению вклада.
+  rules: Верни 1, если тема вкладов действительно обсуждается, иначе 0.
+  trigger: В разговоре обсуждаются вклады, депозиты, ставки, сроки или переоформление вклада.
+  positive_definition: Тема вкладов присутствует.
+  negative_definition: Тема вкладов отсутствует.
+  good_examples: []
+  bad_examples: []
+  output_rule: Верни 1 только при наличии темы вкладов.
+  penalty: 0
+  critical: false
+  severity: info
+  quote_required: false
+  recommendation: ""
+  topic_gate: true
+
+- code: DEPOSIT_01
+  block: deposit
+  title: Сотрудник сообщил о приближении окончания или завершении вклада
+  description: Менеджер объяснил причину звонка по вкладу.
+  rules: В начале должна быть обозначена причина контакта по вкладу.
+  trigger: Звонок касается окончания, переоформления или пролонгации вклада.
+  positive_definition: Причина контакта названа.
+  negative_definition: Менеджер перешёл к продукту без причины звонка.
+  good_examples: []
+  bad_examples: []
+  output_rule: Верни 1 при выполнении требования, иначе 0.
+  penalty: 5
+  critical: false
+  severity: minor
+  quote_required: true
+  recommendation: В начале звонка кратко обозначайте причину контакта по вкладу.
+
+- code: DEPOSIT_02
+  block: deposit
+  title: Сначала предложена публичная линейка вкладов
+  description: Перед закрытым предложением сотрудник предложил публичную линейку.
+  rules: Особый Плюс нельзя предлагать первым шагом.
+  trigger: Есть предложение нового или переоткрываемого вклада.
+  positive_definition: Сначала предложены публичные вклады.
+  negative_definition: Сотрудник сразу предложил закрытый вклад.
+  good_examples: []
+  bad_examples: []
+  output_rule: Верни 1 при соблюдении последовательности, иначе 0.
+  penalty: 20
+  critical: true
+  severity: critical
+  quote_required: true
+  recommendation: Сначала предлагайте публичную линейку вкладов.
+
+- code: DEPOSIT_03
+  block: deposit
+  title: Особый Плюс предлагается только после отказа от публичной линейки
+  description: Закрытая линейка предложена только после отказа клиента.
+  rules: До Особого Плюса должна быть зафиксирована реакция на публичную линейку.
+  trigger: Обсуждается Особый Плюс.
+  positive_definition: До предложения был отказ клиента.
+  negative_definition: Особый Плюс предложен без отказа.
+  good_examples: []
+  bad_examples: []
+  output_rule: Верни 1 при корректной последовательности, иначе 0.
+  penalty: 20
+  critical: true
+  severity: critical
+  quote_required: true
+  recommendation: Не предлагайте Особый Плюс первым шагом.
+
+- code: DEPOSIT_04
+  block: deposit
+  title: Особый Плюс допустим при упоминании лучших условий другого банка
+  description: Индивидуальные условия предложены после сравнения с другим банком.
+  rules: Сначала должен прозвучать клиентский сигнал о лучших условиях.
+  trigger: Клиент сравнивает предложение с другим банком.
+  positive_definition: Сигнал клиента зафиксирован до индивидуального предложения.
+  negative_definition: Индивидуальное предложение сделано без сигнала клиента.
+  good_examples: []
+  bad_examples: []
+  output_rule: Верни 1 при наличии сигнала, иначе 0.
+  penalty: 15
+  critical: false
+  severity: significant
+  quote_required: true
+  recommendation: Сначала зафиксируйте сигнал клиента о лучших условиях другого банка.
+
+- code: DEPOSIT_05
+  block: deposit
+  title: Корректно раскрыта ставка
+  description: Ставка названа либо обозначена необходимость её согласования.
+  rules: Нельзя оставлять клиента без информации о ставке.
+  trigger: Менеджер предлагает вклад.
+  positive_definition: Ставка названа корректно.
+  negative_definition: Ставка не раскрыта.
+  good_examples: []
+  bad_examples: []
+  output_rule: Верни 1 при корректном раскрытии ставки, иначе 0.
+  penalty: 10
+  critical: false
+  severity: significant
+  quote_required: true
+  recommendation: Называйте ставку и отмечайте, если она требует согласования.
+
+- code: DEPOSIT_06
+  block: deposit
+  title: Корректно раскрыт срок вклада
+  description: Клиенту понятен срок размещения.
+  rules: Срок должен быть назван или вынесен в следующий шаг.
+  trigger: Менеджер предлагает вклад.
+  positive_definition: Срок назван или будет уточнён.
+  negative_definition: Срок не раскрыт.
+  good_examples: []
+  bad_examples: []
+  output_rule: Верни 1 при раскрытии срока, иначе 0.
+  penalty: 7
+  critical: false
+  severity: minor
+  quote_required: true
+  recommendation: Озвучивайте срок вместе со ставкой и ключевыми условиями.
+
+- code: DEPOSIT_07
+  block: deposit
+  title: Корректно раскрыты ключевые условия вклада
+  description: Раскрыты применимые ограничения и условия продукта.
+  rules: Нужно раскрыть существенные для предложения параметры.
+  trigger: Менеджер предлагает вклад.
+  positive_definition: Ключевые условия раскрыты.
+  negative_definition: Существенные условия пропущены.
+  good_examples: []
+  bad_examples: []
+  output_rule: Верни 1 при достаточном раскрытии, иначе 0.
+  penalty: 10
+  critical: false
+  severity: significant
+  quote_required: true
+  recommendation: Раскрывайте ставку, срок и применимые ключевые условия вклада.
+
+- code: DEPOSIT_08
+  block: deposit
+  title: Нет запрещённых обещаний
+  description: Менеджер не гарантирует недоступные условия.
+  rules: До проверки нельзя обещать ставку или согласование.
+  trigger: Обсуждаются индивидуальные условия.
+  positive_definition: Использованы осторожные формулировки.
+  negative_definition: Прозвучала необоснованная гарантия.
+  good_examples: []
+  bad_examples: []
+  output_rule: Верни 1 при отсутствии запрещённых обещаний, иначе 0.
+  penalty: 25
+  critical: true
+  severity: critical
+  quote_required: true
+  recommendation: Не обещайте условия до проверки и согласования.
+
+- code: DEPOSIT_09
+  block: deposit
+  title: Отсутствует фрод со схемой получения Особого Плюса
+  description: Сотрудник не обучает клиента обходу технологии продаж.
+  rules: Нельзя подсказывать, что сказать для получения закрытого предложения.
+  trigger: Обсуждается Особый Плюс или индивидуальная ставка.
+  positive_definition: Схема обхода не предлагалась.
+  negative_definition: Сотрудник подсказал схему обхода.
+  good_examples: []
+  bad_examples: []
+  output_rule: Верни 0 при любой подсказке схемы обхода, иначе 1.
+  penalty: 100
+  critical: true
+  severity: fraud
+  quote_required: true
+  recommendation: Никогда не подсказывайте клиенту сценарий получения закрытого предложения.
+
+- code: DEPOSIT_10
+  block: deposit
+  title: Корректно определён разговор с середины
+  description: Реализация прежней договорённости не оценена как новая продажа.
+  rules: Учитывай контекст уже достигнутой договорённости.
+  trigger: Звонок начинается с реализации ранее согласованного решения.
+  positive_definition: Контекст продолжения распознан.
+  negative_definition: Продолжение ошибочно оценено как первичное предложение.
+  good_examples: []
+  bad_examples: []
+  output_rule: Верни 1 при корректном распознавании контекста, иначе 0.
+  penalty: 0
+  critical: false
+  severity: info
+  quote_required: false
+  recommendation: Учитывайте ранее достигнутые договорённости.
+
+- code: DEPOSIT_11
+  block: deposit
+  title: Корректно зафиксирован следующий шаг
+  description: В конце понятен результат и дальнейшее действие.
+  rules: Должно быть понятно, кто, что и когда делает.
+  trigger: Звонок по вкладам подходит к завершению.
+  positive_definition: Итог и следующий шаг зафиксированы.
+  negative_definition: Итог или следующее действие отсутствуют.
+  good_examples: []
+  bad_examples: []
+  output_rule: Верни 1 при наличии следующего шага, иначе 0.
+  penalty: 5
+  critical: false
+  severity: minor
+  quote_required: true
+  recommendation: В финале фиксируйте итог и следующий шаг.
+
+- code: DEPOSIT_12
+  block: deposit
+  title: Корректно обработан отказ клиента
+  description: Отказ принят без давления и с допустимым следующим шагом.
+  rules: Нельзя игнорировать отказ или продолжать давление.
+  trigger: Клиент выражает отказ или сомнение.
+  positive_definition: Позиция клиента принята корректно.
+  negative_definition: Отказ проигнорирован или использовано давление.
+  good_examples: []
+  bad_examples: []
+  output_rule: Верни 1 при корректной обработке отказа, иначе 0.
+  penalty: 5
+  critical: false
+  severity: minor
+  quote_required: true
+  recommendation: Спокойно уточните причину отказа и зафиксируйте следующий шаг.

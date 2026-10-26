@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quality-kafka-consumer"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "aiokafka>=0.12,<1",
+  "alembic>=1.14,<2",
+  "asyncpg>=0.30,<1",
+  "cryptography>=44,<46",
+  "fastapi>=0.115,<1",
+  "grpcio-tools>=1.68,<2",
+  "httpx>=0.28,<1",
+  "orjson>=3.10,<4",
+  "protobuf>=5.29,<7",
+  "pydantic>=2.10,<3",
+  "pydantic-settings>=2.7,<3",
+  "prometheus-client>=0.21,<1",
+  "sqlalchemy[asyncio]>=2.0.36,<3",
+  "uvicorn[standard]>=0.34,<1",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8.3,<9", "pytest-asyncio>=0.25,<1"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.ruff]
+extend-exclude = ["app/proto/*_pb2.py"]
+

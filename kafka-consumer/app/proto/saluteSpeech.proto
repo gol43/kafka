@@ -1,0 +1,26 @@
+syntax = "proto3";
+package smartspeech.recognition.v2;
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+message RecognitionResponse {
+  oneof response { Transcription transcription = 1; BackendInfo backend_info = 2; InsightResult insight = 3; VADResult vad = 4; }
+  oneof record_info { CallRecordInfo call = 5; RestRecordInfo rest = 6; }
+  oneof record { CallInfo call_rec = 7; RestInfo rest_rec = 8; }
+}
+message CallRecordInfo { string uuid = 1; string to = 2; string from = 3; string from_name = 4; string call_id = 5; int64 part = 6; bool is_last = 7; string to_name = 8; string to_employee_id = 9; string from_employee_id = 10; }
+message RestRecordInfo { string uuid = 1; int64 part = 2; bool is_last = 3; User usr = 4; }
+message CallInfo { Participant to = 1; Participant from = 2; string uuid = 3; int64 part = 4; bool is_last = 5; string channel = 6; string call_id = 7; FileInfo info = 8; }
+message FileInfo { google.protobuf.Timestamp datetime = 1; }
+message Participant { string name = 1; string phone_number = 2; string employee_id = 3; }
+message RestInfo { string uuid = 1; int64 part = 2; bool is_last = 3; User usr = 4; }
+message User { string login = 1; string employee_id = 2; }
+enum EouReason { UNSPECIFIED = 0; ORGANIC = 1; NO_SPEECH_TIMEOUT = 2; MAX_SPEECH_TIMEOUT = 3; }
+message Transcription { int32 channel = 1; repeated Hypothesis results = 2; bool eou = 3; EouReason eou_reason = 4; google.protobuf.Duration processed_audio_start = 5; google.protobuf.Duration processed_audio_end = 6; Emotions emotions_result = 7; SpeakerInfo speaker_info = 8; }
+message InsightResult { string insight_result = 10; }
+message VADResult { int32 channel = 1; google.protobuf.Duration processed_audio_time = 2; google.protobuf.Duration utterance_detection_time = 3; }
+message Hypothesis { message WordAlignment { string word = 1; google.protobuf.Duration start = 2; google.protobuf.Duration end = 3; } string text = 1; string normalized_text = 2; google.protobuf.Duration start = 3; google.protobuf.Duration end = 4; repeated WordAlignment word_alignments = 5; }
+message Emotions { float positive = 1; float neutral = 2; float negative = 3; float positive_a = 4; float neutral_a = 5; float negative_a = 6; float positive_t = 7; float neutral_t = 8; float negative_t = 9; }
+message BackendInfo { string model_name = 1; string model_version = 2; string server_version = 3; }
+message SpeakerInfo { int32 speaker_id = 1; float main_speaker_confidence = 2; }
+
