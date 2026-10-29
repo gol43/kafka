@@ -4,8 +4,8 @@ from datetime import UTC, datetime
 from app.config import Settings
 from app.database.repositories.dialog_repository import DialogRepository
 from app.schemas.dialogs import CleanedDialog
-from app.services.analysis_worker import AnalysisWorker
-from app.services.calendar_policy import resolve_work_date
+from app.services.dialog_analysis.analysis_worker import AnalysisWorker
+from app.services.dialog_analysis.calendar_policy import resolve_work_date
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ class DialogIntakeService:
         if not required_analyzers:
             raise ValueError("Для менеджера не назначен ни один анализатор")
 
-        await self._repository.save_cleaned_dialog(
+        saved = await self._repository.save_cleaned_dialog(
             payload,
             work_date,
             required_analyzers,
@@ -61,12 +61,11 @@ class DialogIntakeService:
             model_name=self._settings.selected_llm_model,
             prompt_version=self._settings.prompt_version,
         )
+        if not saved:
+            logger.info("Dialog duplicate ignored call_id=%s", payload.call_id)
+            return "duplicate"
+
         logger.info("Dialog saved call_id=%s", payload.call_id)
-        await self._worker.enqueue(
-            "dialog",
-            payload.call_id,
-            payload.manager_id,
-            {"required_analyzers": required_analyzers},
-        )
+        await self._worker.enqueue(payload.call_id)
         logger.info("Dialog task created call_id=%s", payload.call_id)
         return "accepted"

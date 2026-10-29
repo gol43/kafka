@@ -1,0 +1,118 @@
+{
+  "contract_version": "1.0",
+  "cleaner_version": "manual-e2e-1",
+  "call_id": "work-e2e-card-002",
+  "manager_id": "00000002",
+  "manager_name": "Олег Петров",
+  "client_epk": "epk-petrov-002",
+  "client_fio": "Петров Пётр Петрович",
+  "duration_seconds": 69,
+  "occurred_at": "2026-10-27T10:30:00Z",
+  "channel": "phone",
+  "participants": [
+    {
+      "role": "employee",
+      "name": "Олег Петров",
+      "employee_id": "00000002"
+    },
+    {
+      "role": "client",
+      "name": "Петров Пётр Петрович"
+    }
+  ],
+  "cleaned_text": "Сотрудник: Добрый день! Меня зовут Олег, Сбербанк. Чем могу помочь? Клиент: У меня закончился срок действия банковской карты. Сотрудник: Я проверю доступные способы перевыпуска. Новую карту можно получить в выбранном офисе. Клиент: Когда она будет готова? Сотрудник: Обычно выпуск занимает несколько рабочих дней. Я направлю уведомление, когда карта поступит в офис. Клиент: Спасибо. Сотрудник: Благодарю за обращение. До свидания.",
+  "utterances": [
+    {
+      "sequence_number": 0,
+      "speaker_role": "employee",
+      "speaker_id": 1,
+      "channel": 1,
+      "text": "Добрый день! Меня зовут Олег, Сбербанк. Чем могу помочь?",
+      "normalized_text": "Добрый день! Меня зовут Олег, Сбербанк. Чем могу помочь?",
+      "start_ms": 0,
+      "end_ms": 9000,
+      "emotions": {
+        "positive": 0.6,
+        "neutral": 0.4,
+        "negative": 0.0
+      },
+      "word_alignments": []
+    },
+    {
+      "sequence_number": 1,
+      "speaker_role": "client",
+      "speaker_id": 2,
+      "channel": 2,
+      "text": "У меня закончился срок действия банковской карты.",
+      "normalized_text": "У меня закончился срок действия банковской карты.",
+      "start_ms": 10000,
+      "end_ms": 19000,
+      "emotions": null,
+      "word_alignments": []
+    },
+    {
+      "sequence_number": 2,
+      "speaker_role": "employee",
+      "speaker_id": 1,
+      "channel": 1,
+      "text": "Я проверю доступные способы перевыпуска. Новую карту можно получить в выбранном офисе.",
+      "normalized_text": "Я проверю доступные способы перевыпуска. Новую карту можно получить в выбранном офисе.",
+      "start_ms": 20000,
+      "end_ms": 37000,
+      "emotions": null,
+      "word_alignments": []
+    },
+    {
+      "sequence_number": 3,
+      "speaker_role": "client",
+      "speaker_id": 2,
+      "channel": 2,
+      "text": "Когда она будет готова?",
+      "normalized_text": "Когда она будет готова?",
+      "start_ms": 38000,
+      "end_ms": 44000,
+      "emotions": null,
+      "word_alignments": []
+    },
+    {
+      "sequence_number": 4,
+      "speaker_role": "employee",
+      "speaker_id": 1,
+      "channel": 1,
+      "text": "Обычно выпуск занимает несколько рабочих дней. Я направлю уведомление, когда карта поступит в офис.",
+      "normalized_text": "Обычно выпуск занимает несколько рабочих дней. Я направлю уведомление, когда карта поступит в офис.",
+      "start_ms": 45000,
+      "end_ms": 61000,
+      "emotions": null,
+      "word_alignments": []
+    },
+    {
+      "sequence_number": 5,
+      "speaker_role": "client",
+      "speaker_id": 2,
+      "channel": 2,
+      "text": "Спасибо.",
+      "normalized_text": "Спасибо.",
+      "start_ms": 62000,
+      "end_ms": 64000,
+      "emotions": null,
+      "word_alignments": []
+    },
+    {
+      "sequence_number": 6,
+      "speaker_role": "employee",
+      "speaker_id": 1,
+      "channel": 1,
+      "text": "Благодарю за обращение. До свидания.",
+      "normalized_text": "Благодарю за обращение. До свидания.",
+      "start_ms": 65000,
+      "end_ms": 69000,
+      "emotions": null,
+      "word_alignments": []
+    }
+  ],
+  "source_metadata": {
+    "source": "manual-work-e2e"
+  },
+  "encrypted": false
+}

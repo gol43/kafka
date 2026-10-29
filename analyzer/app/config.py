@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     worker_claim_limit: int = Field(default=100, ge=1)
     dialog_pipeline_concurrency: int = Field(default=10, ge=1)
     min_dialog_duration_seconds: int = Field(default=50, ge=0)
+    data_ttl_days: int = Field(default=183, ge=1)
     calendar_filter_enabled: bool = True
     analyzed_manager_ids: Annotated[set[str], NoDecode] = Field(
         default_factory=set,
@@ -58,12 +59,12 @@ class Settings(BaseSettings):
         default_factory=set,
         validation_alias="AUDIO_ANALYZER_MANAGER_IDS",
     )
-    faq_analyzer_manager_ids: Annotated[set[str], NoDecode] = Field(
+    factor_analyzer_manager_ids: Annotated[set[str], NoDecode] = Field(
         default_factory=set,
-        validation_alias="FAQ_ANALYZER_MANAGER_IDS",
+        validation_alias="FACTOR_ANALYZER_MANAGER_IDS",
     )
     audio_analyzer_url: str | None = None
-    faq_analyzer_url: str | None = None
+    factor_analyzer_url: str | None = None
     external_analyzer_timeout_seconds: float = Field(default=300, gt=0)
 
     llm_provider: Literal["gigachat", "ollama"] = "gigachat"
@@ -104,23 +105,21 @@ class Settings(BaseSettings):
     report_version: str = "v1"
     dashboard_enabled: bool = True
     dashboard_cron_hour_utc: int = Field(default=18, ge=0, le=23)
+    dashboard_wait_interval_seconds: float = Field(default=30, gt=0)
     metric_rolling_window_days: int = Field(default=30, ge=1)
+    risk_rolling_window_days: int = Field(default=10, ge=1)
     strength_min_percent: float = Field(default=80, ge=0, le=100)
     strengths_limit: int = Field(default=3, ge=1)
     improvements_limit: int = Field(default=3, ge=1)
-    risk_clients_limit: int = Field(default=4, ge=1)
+    risk_clients_limit: int = Field(default=5, ge=1)
     latest_communications_limit: int = Field(default=5, ge=1)
+    communications_max_limit: int = Field(default=100, ge=1)
     metric_failed_communications_limit: int = Field(default=3, ge=1)
     metric_weekly_points_limit: int = Field(default=4, ge=1)
     critical_score_cap: float = Field(default=80, ge=0, le=100)
     empty_score_value: float = Field(default=0, ge=0, le=100)
-    daily_report_enabled: bool = True
-    daily_report_cron_hour_utc: int = Field(default=18, ge=0, le=23)
-    weekly_report_enabled: bool = True
-    weekly_report_cron_day: str = "sat"
-    weekly_report_cron_hour_utc: int = Field(default=1, ge=0, le=23)
-    four_week_report_enabled: bool = True
-    quarterly_report_enabled: bool = True
+    test_data_api_enabled: bool = False
+    test_data_default_days: int = Field(default=45, ge=5, le=183)
 
     @property
     def postgres_dsn(self) -> str:
@@ -150,8 +149,8 @@ class Settings(BaseSettings):
             analyzers.append("prompt")
         if manager_id in self.audio_analyzer_manager_ids:
             analyzers.append("audio")
-        if manager_id in self.faq_analyzer_manager_ids:
-            analyzers.append("faq")
+        if manager_id in self.factor_analyzer_manager_ids:
+            analyzers.append("factor")
         return tuple(analyzers)
 
     @property
@@ -166,7 +165,7 @@ class Settings(BaseSettings):
         "analyzed_manager_ids",
         "prompt_analyzer_manager_ids",
         "audio_analyzer_manager_ids",
-        "faq_analyzer_manager_ids",
+        "factor_analyzer_manager_ids",
         mode="before",
     )
     @classmethod
@@ -209,10 +208,11 @@ class Settings(BaseSettings):
         configured = (
             self.prompt_analyzer_manager_ids
             | self.audio_analyzer_manager_ids
-            | self.faq_analyzer_manager_ids
+            | self.factor_analyzer_manager_ids
         )
         unknown = configured - self.analyzed_manager_ids
         without_profile = self.analyzed_manager_ids - configured
+        without_prompt = self.analyzed_manager_ids - self.prompt_analyzer_manager_ids
         if unknown:
             raise ValueError(
                 f"Профиль задан для менеджеров вне ANALYZED_MANAGER_IDS: {sorted(unknown)}"
@@ -221,10 +221,15 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"Для менеджеров не назначен ни один анализатор: {sorted(without_profile)}"
             )
+        if without_prompt:
+            raise ValueError(
+                "Prompt Analyzer с гигиеной, вкладами и рисками обязателен для "
+                f"менеджеров: {sorted(without_prompt)}"
+            )
         if self.audio_analyzer_manager_ids and not self.audio_analyzer_url:
             raise ValueError("Для Audio Analyzer требуется AUDIO_ANALYZER_URL")
-        if self.faq_analyzer_manager_ids and not self.faq_analyzer_url:
-            raise ValueError("Для FAQ Analyzer требуется FAQ_ANALYZER_URL")
+        if self.factor_analyzer_manager_ids and not self.factor_analyzer_url:
+            raise ValueError("Для Factor Analyzer требуется FACTOR_ANALYZER_URL")
         return self
 
 

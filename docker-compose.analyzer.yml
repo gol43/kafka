@@ -1,0 +1,80 @@
+name: quality-analyzer-local
+
+# Локальный профиль только для Analyzer и LLM.
+# PostgreSQL запускается отдельно и доступен контейнеру через host.docker.internal.
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - quality-analyzer-ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+    restart: unless-stopped
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    entrypoint: ["/bin/ollama"]
+    command: ["pull", "${OLLAMA_MODEL:-qwen3:4b-instruct}"]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
+  analyzer:
+    build:
+      context: ./analyzer
+    environment:
+      DB_USER: ${POSTGRES_USER:-quality}
+      DB_PASS: ${POSTGRES_PASSWORD:-quality}
+      DB_NAME: ${POSTGRES_DB:-quality}
+      POSTGRES_HOSTS: host.docker.internal:${POSTGRES_HOST_PORT:-55432}
+      POSTGRES_DSN: ""
+      LLM_PROVIDER: ollama
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b-instruct}
+      ACTIVE_CRITERIA_CODES: ${ACTIVE_CRITERIA_CODES:-}
+      GIGACHAT_MAX_INPUT_TOKENS: ${LOCAL_LLM_MAX_INPUT_TOKENS:-8192}
+      GIGACHAT_PROMPT_RESERVE_TOKENS: 1000
+      GIGACHAT_OUTPUT_RESERVE_TOKENS: 2000
+      GIGACHAT_MAX_OUTPUT_TOKENS: 2000
+      GIGACHAT_TEMPERATURE: 0
+      CALENDAR_FILTER_ENABLED: ${CALENDAR_FILTER_ENABLED:-false}
+      WORKER_POLL_INTERVAL_SECONDS: ${WORKER_POLL_INTERVAL_SECONDS:-30}
+      WORKER_CLAIM_LIMIT: ${WORKER_CLAIM_LIMIT:-100}
+      DIALOG_PIPELINE_CONCURRENCY: ${DIALOG_PIPELINE_CONCURRENCY:-1}
+      MIN_DIALOG_DURATION_SECONDS: ${MIN_DIALOG_DURATION_SECONDS:-50}
+      DATA_TTL_DAYS: ${DATA_TTL_DAYS:-183}
+      DEPOSIT_ANALYSIS_ENABLED: ${DEPOSIT_ANALYSIS_ENABLED:-true}
+      DASHBOARD_ENABLED: ${DASHBOARD_ENABLED:-true}
+      DASHBOARD_CRON_HOUR_UTC: ${DASHBOARD_CRON_HOUR_UTC:-18}
+      DASHBOARD_WAIT_INTERVAL_SECONDS: ${DASHBOARD_WAIT_INTERVAL_SECONDS:-30}
+      METRIC_ROLLING_WINDOW_DAYS: ${METRIC_ROLLING_WINDOW_DAYS:-30}
+      RISK_ROLLING_WINDOW_DAYS: ${RISK_ROLLING_WINDOW_DAYS:-10}
+      STRENGTH_MIN_PERCENT: ${STRENGTH_MIN_PERCENT:-80}
+      STRENGTHS_LIMIT: ${STRENGTHS_LIMIT:-3}
+      IMPROVEMENTS_LIMIT: ${IMPROVEMENTS_LIMIT:-3}
+      RISK_CLIENTS_LIMIT: ${RISK_CLIENTS_LIMIT:-5}
+      LATEST_COMMUNICATIONS_LIMIT: ${LATEST_COMMUNICATIONS_LIMIT:-5}
+      COMMUNICATIONS_MAX_LIMIT: ${COMMUNICATIONS_MAX_LIMIT:-100}
+      ANALYZED_MANAGER_IDS: ${ANALYZED_MANAGER_IDS:-00000001}
+      PROMPT_ANALYZER_MANAGER_IDS: ${PROMPT_ANALYZER_MANAGER_IDS:-00000001}
+      AUDIO_ANALYZER_MANAGER_IDS: ${AUDIO_ANALYZER_MANAGER_IDS:-}
+      FACTOR_ANALYZER_MANAGER_IDS: ${FACTOR_ANALYZER_MANAGER_IDS:-}
+      AUDIO_ANALYZER_URL: ${AUDIO_ANALYZER_URL:-}
+      FACTOR_ANALYZER_URL: ${FACTOR_ANALYZER_URL:-}
+    ports:
+      - "8082:8080"
+    depends_on:
+      ollama-pull:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  quality-analyzer-ollama:

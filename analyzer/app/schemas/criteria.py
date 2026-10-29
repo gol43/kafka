@@ -20,8 +20,17 @@ class CriterionDefinition(BaseModel):
     output_rule: str
     penalty: int
     critical: bool
-    block: Literal["general", "deposit"] = "general"
-    severity: Literal["critical", "significant", "minor", "fraud", "info"] = (
+    block: Literal["general", "deposit", "risk"] = "general"
+    severity: Literal[
+        "fraud",
+        "critical",
+        "significant",
+        "minor",
+        "info",
+        "high",
+        "medium",
+        "low",
+    ] = (
         "minor"
     )
     quote_required: bool = True

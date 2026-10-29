@@ -14,14 +14,19 @@ class PromptAnalysisAgent:
         self,
         prompt_loader: PromptLoader,
         provider: BaseGigaChatProvider,
+        block: str,
         log_responses: bool = True,
     ) -> None:
         self._prompts = prompt_loader
         self._provider = provider
+        self._block = block
         self._log_responses = log_responses
 
-    async def analyze(self, dialog_text: str, block: str) -> DialogAnalysisResponse:
-        system_prompt, user_prompt = self._prompts.render_dialog(dialog_text, block)
+    async def analyze(self, dialog_text: str) -> DialogAnalysisResponse:
+        system_prompt, user_prompt = self._prompts.render_dialog(
+            dialog_text,
+            self._block,
+        )
         result = await self._provider.chat_structured(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
@@ -29,7 +34,7 @@ class PromptAnalysisAgent:
         )
         if self._log_responses:
             logger.info("LLM response body=%s", result.model_dump_json())
-        self._validate_result(result, dialog_text, block)
+        self._validate_result(result, dialog_text, self._block)
         return result
 
     def _validate_result(

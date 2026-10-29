@@ -17,15 +17,3 @@ class DialogAnalysisResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     results: list[CriterionResult] = Field(min_length=1)
-
-
-class AggregatedRecommendation(BaseModel):
-    """Текстовая часть агрегированного отчёта.
-
-    Оценок здесь намеренно нет: приложение само рассчитывает все числа из
-    завершённых отчётов предыдущего уровня.
-    """
-
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    summary: str = Field(min_length=1)

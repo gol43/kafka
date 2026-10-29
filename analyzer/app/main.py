@@ -17,13 +17,17 @@ from app.config import get_settings
 from app.database.repositories.analysis_task_repository import AnalysisTaskRepository
 from app.database.repositories.dialog_repository import DialogRepository
 from app.database.repositories.dashboard_repository import DashboardRepository
-from app.services.analysis_worker import AnalysisWorker
-from app.services.dialog_analysis_orchestrator import DialogAnalysisOrchestrator
-from app.services.dialog_intake import DialogIntakeService
-from app.services.dashboard_builder import DashboardBuilder
-from app.services.dashboard_scheduler import DashboardScheduler
-from app.services.manager_service import ManagerService
-from app.services.prompt_dialog_analyzer import PromptDialogAnalyzer
+from app.database.repositories.dialog_report_repository import DialogReportRepository
+from app.services.dashboard.dashboard_builder import DashboardBuilder
+from app.services.dashboard.dashboard_scheduler import DashboardScheduler
+from app.services.dashboard.manager_service import ManagerService
+from app.services.dashboard.test_data_service import DashboardTestDataService
+from app.services.dialog_analysis.analysis_worker import AnalysisWorker
+from app.services.dialog_analysis.dialog_analysis_orchestrator import (
+    DialogAnalysisOrchestrator,
+)
+from app.services.dialog_analysis.dialog_intake import DialogIntakeService
+from app.services.dialog_analysis.prompt_dialog_analyzer import PromptDialogAnalyzer
 
 settings = get_settings()
 logging.basicConfig(level=settings.log_level)
@@ -33,21 +37,38 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    app.state.settings = settings
     prompt_loader = PromptLoader(active_criteria_codes=settings.active_criteria_codes)
     provider = create_llm_provider(settings)
 
-    dialog_repository = DialogRepository()
-    task_repository = AnalysisTaskRepository()
-    dashboard_repository = DashboardRepository()
+    dialog_repository = DialogRepository(settings.data_ttl_days)
+    task_repository = AnalysisTaskRepository(settings.data_ttl_days)
+    dialog_report_repository = DialogReportRepository()
+    dashboard_repository = DashboardRepository(settings.data_ttl_days)
 
-    prompt_agent = PromptAnalysisAgent(
+    hygiene_agent = PromptAnalysisAgent(
         prompt_loader,
         provider,
+        block="general",
+        log_responses=settings.log_llm_responses,
+    )
+    deposit_agent = PromptAnalysisAgent(
+        prompt_loader,
+        provider,
+        block="deposit",
+        log_responses=settings.log_llm_responses,
+    )
+    risk_agent = PromptAnalysisAgent(
+        prompt_loader,
+        provider,
+        block="risk",
         log_responses=settings.log_llm_responses,
     )
     prompt_dialog_analyzer = PromptDialogAnalyzer(
         prompt_loader=prompt_loader,
-        agent=prompt_agent,
+        hygiene_agent=hygiene_agent,
+        deposit_agent=deposit_agent,
+        risk_agent=risk_agent,
         settings=settings,
     )
     external_analyzers = {}
@@ -57,10 +78,10 @@ async def lifespan(app: FastAPI):
             base_url=settings.audio_analyzer_url,
             timeout_seconds=settings.external_analyzer_timeout_seconds,
         )
-    if settings.faq_analyzer_url:
-        external_analyzers["faq"] = ExternalAnalyzerAgent(
-            name="faq",
-            base_url=settings.faq_analyzer_url,
+    if settings.factor_analyzer_url:
+        external_analyzers["factor"] = ExternalAnalyzerAgent(
+            name="factor",
+            base_url=settings.factor_analyzer_url,
             timeout_seconds=settings.external_analyzer_timeout_seconds,
         )
 
@@ -77,8 +98,17 @@ async def lifespan(app: FastAPI):
         dialogs=dialog_repository,
         dialog_orchestrator=dialog_orchestrator,
     )
-    dashboard_builder = DashboardBuilder(settings, dashboard_repository)
-    scheduler = DashboardScheduler(settings, dashboard_builder)
+    dashboard_builder = DashboardBuilder(
+        settings,
+        dashboard_repository,
+        dialog_report_repository,
+    )
+    scheduler = DashboardScheduler(
+        settings,
+        dashboard_builder,
+        dialog_repository,
+        task_repository,
+    )
 
     app.state.analysis_worker = worker
     app.state.dashboard_scheduler = scheduler
@@ -88,8 +118,18 @@ async def lifespan(app: FastAPI):
         worker,
     )
     app.state.manager_service = ManagerService(
-        dialog_repository,
         dashboard_repository,
+        dialog_report_repository,
+    )
+    app.state.dashboard_test_data = (
+        DashboardTestDataService(
+            settings,
+            prompt_loader,
+            dialog_report_repository,
+            dashboard_builder,
+        )
+        if settings.test_data_api_enabled
+        else None
     )
 
     worker_task = asyncio.create_task(worker.run(), name="analysis-worker")

@@ -3,34 +3,48 @@ import hashlib
 from app.schemas.entities import DialogEntity
 
 SEVERITY_ORDER = {
-    "fraud": 5,
-    "critical": 4,
-    "significant": 3,
+    "fraud": 8,
+    "high": 7,
+    "critical": 6,
+    "medium": 5,
+    "significant": 4,
+    "low": 3,
     "minor": 2,
     "info": 1,
 }
+
 
 def build_dialog_report(
     dialog: DialogEntity,
     *,
     final_score: float,
     deviations_count: int,
-    criteria: list[dict],
+    hygiene_results: list[dict],
+    deposit_results: list[dict],
+    risk_results: list[dict],
     strengths_limit: int,
     improvements_limit: int,
     positive_templates: tuple[str, ...],
 ) -> dict:
-    """Формирует готовую карточку звонка без вычислений во время GET."""
+    """Формирует готовый popup диалога без вычислений во время GET."""
 
-    included = [item for item in criteria if item["included_in_analytics"]]
+    scored = [
+        item
+        for item in hygiene_results + deposit_results
+        if item["included_in_analytics"]
+    ]
     passed = sorted(
-        (item for item in included if item["score"] == 1),
+        (item for item in scored if item["score"] == 1),
         key=_criterion_sort_key,
     )[:strengths_limit]
     failed = sorted(
-        (item for item in included if item["score"] == 0),
+        (item for item in scored if item["score"] == 0),
         key=_criterion_sort_key,
     )[:improvements_limit]
+    detected_risks = sorted(
+        (item for item in risk_results if item["score"] == 0),
+        key=_criterion_sort_key,
+    )
 
     titles = ", ".join(item["title"] for item in passed)
     positive_text = ""
@@ -43,11 +57,12 @@ def build_dialog_report(
 
     return {
         "callId": dialog.call_id,
-        "clientFio": dialog.client_fio,
-        "occurredAt": dialog.occurred_at.isoformat() if dialog.occurred_at else None,
+        "clientEpk": dialog.client_epk,
+        "occurredAt": dialog.occurred_at.isoformat(),
         "type": "call",
         "score": final_score,
         "deviationsCount": deviations_count,
+        "risk": _risk_payload(detected_risks[0]) if detected_risks else None,
         "strengths": {
             "text": positive_text,
             "metrics": [
@@ -65,6 +80,16 @@ def build_dialog_report(
             }
             for item in failed
         ],
+    }
+
+
+def _risk_payload(item: dict) -> dict:
+    return {
+        "code": item["code"],
+        "title": item["title"],
+        "severity": item["severity"],
+        "quote": item["quote"],
+        "recommendation": item["recommendation"],
     }
 
 

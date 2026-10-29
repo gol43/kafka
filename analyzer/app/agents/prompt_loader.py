@@ -41,7 +41,7 @@ class PromptLoader:
                 if criterion.enabled
                 and criterion.prompt_supported
                 and (
-                    criterion.block == "deposit"
+                    criterion.block in {"deposit", "risk"}
                     or criterion.code in active_criteria_codes
                 )
             )
@@ -54,7 +54,7 @@ class PromptLoader:
         }
         self.criteria_by_block = {
             block: tuple(item for item in self.criteria if item.block == block)
-            for block in ("general", "deposit")
+            for block in ("general", "deposit", "risk")
         }
 
     def render_dialog(self, dialog_text: str, block: str = "general") -> tuple[str, str]:

@@ -1,25 +1,21 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from app.database.connection import session_scope
-from app.database.models import (
-    AnalysisTask,
-    DailyReport,
-    Dialog,
-    FourWeekReport,
-    QuarterlyReport,
-    WeeklyReport,
-)
+from app.database.models import AnalysisTask, Dialog
 from app.schemas.entities import AnalysisTaskEntity
 
 
 class AnalysisTaskRepository:
-    """SQL-операции внутренней персистентной очереди Analyzer."""
+    """Персистентная очередь анализа диалогов."""
+
+    def __init__(self, ttl_days: int) -> None:
+        self._ttl = timedelta(days=ttl_days)
 
     async def recover_processing(self) -> None:
-        """После рестарта возвращает незавершённую работу в `waiting`."""
+        """После рестарта возвращает незавершённые задания в waiting."""
 
         async with session_scope() as session:
             await session.execute(
@@ -29,79 +25,88 @@ class AnalysisTaskRepository:
             )
             await session.execute(
                 update(Dialog)
-                .where(Dialog.analysis_status == "processing")
-                .values(analysis_status="waiting")
+                .where(Dialog.status == "processing")
+                .values(status="waiting")
             )
-            for model in (DailyReport, WeeklyReport, FourWeekReport, QuarterlyReport):
-                await session.execute(
-                    update(model)
-                    .where(model.status == "processing")
-                    .values(status="waiting")
-                )
 
-    async def enqueue(
-        self,
-        *,
-        task_type: str,
-        entity_key: str,
-        manager_id: str,
-        priority: int,
-        report_version: str,
-        payload: dict,
-    ) -> None:
-        """Кладёт идемпотентное задание в очередь."""
-
+    async def enqueue(self, call_id: str) -> None:
+        now = datetime.now(UTC)
         async with session_scope() as session:
             await session.execute(
                 insert(AnalysisTask)
                 .values(
-                    task_type=task_type,
-                    entity_key=entity_key,
-                    manager_id=manager_id,
+                    call_id=call_id,
                     status="waiting",
-                    priority=priority,
-                    report_version=report_version,
-                    payload=payload,
+                    expires_at=now + self._ttl,
                 )
-                .on_conflict_do_nothing(
-                    index_elements=["task_type", "entity_key", "report_version"]
-                )
+                .on_conflict_do_nothing(index_elements=["call_id"])
             )
 
-    async def claim(self, limit: int) -> list[AnalysisTaskEntity]:
-        """Забирает задания через `FOR UPDATE SKIP LOCKED`."""
+    async def claim(self, limit: int, current_work_date: date) -> list[AnalysisTaskEntity]:
+        """Берёт backlog до текущей рабочей даты через SKIP LOCKED."""
 
         async with session_scope() as session:
             tasks = list(
                 (
                     await session.scalars(
                         select(AnalysisTask)
-                        .where(AnalysisTask.status == "waiting")
-                        .order_by(AnalysisTask.priority, AnalysisTask.created_at)
+                        .join(Dialog, Dialog.call_id == AnalysisTask.call_id)
+                        .where(
+                            AnalysisTask.status == "waiting",
+                            Dialog.work_date <= current_work_date,
+                        )
+                        .order_by(Dialog.work_date, AnalysisTask.created_at)
                         .limit(limit)
                         .with_for_update(skip_locked=True)
                     )
                 ).all()
             )
+            call_ids = [task.call_id for task in tasks]
             for task in tasks:
                 task.status = "processing"
+                task.error_code = None
+            if call_ids:
+                await session.execute(
+                    update(Dialog)
+                    .where(Dialog.call_id.in_(call_ids))
+                    .values(status="processing", error_code=None)
+                )
             return [AnalysisTaskEntity.model_validate(task) for task in tasks]
 
-    async def set_status(
+    async def mark_failed(
         self,
         task_id,
-        status: str,
-        error_code: str | None = None,
-        attempt_count: int = 0,
+        *,
+        error_code: str,
+        attempt_count: int,
     ) -> None:
-        """Фиксирует завершение либо ошибку задания."""
-
         async with session_scope() as session:
             task = await session.get(AnalysisTask, task_id, with_for_update=True)
-            if task is None:
-                return
+            if task:
+                task.status = "failed"
+                task.error_code = error_code
+                task.attempt_count = attempt_count
 
-            task.status = status
-            task.error_code = error_code
-            task.attempt_count = attempt_count
-            task.updated_at = datetime.now(UTC)
+    async def retry(self, call_id: str) -> bool:
+        """Возвращает failed-задание в очередь для ручной проверки."""
+
+        async with session_scope() as session:
+            task = await session.scalar(
+                select(AnalysisTask)
+                .where(AnalysisTask.call_id == call_id)
+                .with_for_update()
+            )
+            dialog = await session.get(Dialog, call_id, with_for_update=True)
+            if task is None or dialog is None:
+                return False
+            task.status = "waiting"
+            task.error_code = None
+            dialog.status = "waiting"
+            dialog.error_code = None
+            return True
+
+    async def cleanup_expired(self, now: datetime) -> None:
+        async with session_scope() as session:
+            await session.execute(
+                delete(AnalysisTask).where(AnalysisTask.expires_at < now)
+            )

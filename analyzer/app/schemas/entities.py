@@ -5,53 +5,57 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class DialogEntity(BaseModel):
-    """Доменное представление диалога без зависимости от SQLAlchemy."""
+    """Диалог, ожидающий полного анализа."""
 
     model_config = ConfigDict(from_attributes=True)
 
     call_id: str
     manager_id: str
-    client_epk: str = ""
-    client_fio: str = ""
+    client_epk: str
     work_date: date
-    occurred_at: datetime | None = None
-    duration_seconds: int = 0
+    occurred_at: datetime
+    received_at: datetime
+    duration_seconds: int
     cleaned_text: str
-    dialog_data: list[dict] = Field(default_factory=list)
     required_analyzers: list[str] = Field(default_factory=list)
-    analysis_results: dict = Field(default_factory=dict)
-    q_score: float | None = None
-    general_score: float | None = None
-    deposit_topic: bool = False
-    deposit_score: float | None = None
-    deviations_count: int = 0
-    dialog_report: dict = Field(default_factory=dict)
-    daily_report_id: uuid.UUID | None = None
+    criteria_version: str
+    prompt_version: str
+    model_name: str
     created_at: datetime
 
 
 class AnalysisTaskEntity(BaseModel):
-    """Задание, которое бизнес-логика получила из внутренней очереди."""
+    """Задание, которое worker забрал из PostgreSQL."""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    task_type: str
-    entity_key: str
+    call_id: str
+    attempt_count: int = 0
+
+
+class DialogReportEntity(BaseModel):
+    """Полный завершённый отчёт одного звонка."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    call_id: str
     manager_id: str
-    payload: dict = Field(default_factory=dict)
-
-
-class AggregateReportEntity(BaseModel):
-    """Единое доменное чтение одной из четырёх таблиц отчётов."""
-
-    id: uuid.UUID
-    report_type: str
-    manager_id: str
-    period_start: date
-    period_end: date
-    q_score: float | None = None
-    score_sum: float | None = None
-    communications_count: int
-    summary: str | None = None
-    details: dict = Field(default_factory=dict)
+    client_epk: str
+    work_date: date
+    occurred_at: datetime
+    cleaned_text: str
+    hygiene_results: list[dict] = Field(default_factory=list)
+    deposit_results: list[dict] = Field(default_factory=list)
+    risk_results: list[dict] = Field(default_factory=list)
+    audio_results: dict = Field(default_factory=dict)
+    factor_results: dict = Field(default_factory=dict)
+    general_score: float
+    deposit_score: float | None = None
+    score: float
+    deposit_topic: bool
+    critical_violation: bool
+    deviations_count: int
+    risks_count: int
+    report_payload: dict = Field(default_factory=dict)
+    completed_at: datetime

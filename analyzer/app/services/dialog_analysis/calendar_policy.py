@@ -1,6 +1,6 @@
 from datetime import UTC, date, datetime, timedelta
 
-UTC_CUTOFF_HOUR = 18
+UTC_CUTOFF_HOUR = 18  # Граница рабочего дня Analyzer.
 
 
 def resolve_work_date(received_at: datetime) -> date | None:

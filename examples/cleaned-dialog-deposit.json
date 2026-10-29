@@ -1,0 +1,122 @@
+{
+  "contract_version": "1.0",
+  "cleaner_version": "manual-e2e-1",
+  "call_id": "work-e2e-deposit-001",
+  "manager_id": "00000001",
+  "manager_name": "Анна Смирнова",
+  "client_epk": "epk-ivanov-001",
+  "client_fio": "Иванов Иван Иванович",
+  "duration_seconds": 78,
+  "occurred_at": "2026-10-27T09:15:00Z",
+  "channel": "phone",
+  "participants": [
+    {
+      "role": "employee",
+      "name": "Анна Смирнова",
+      "employee_id": "00000001"
+    },
+    {
+      "role": "client",
+      "name": "Иванов Иван Иванович"
+    }
+  ],
+  "cleaned_text": "Сотрудник: Добрый день! Меня зовут Анна, Сбербанк. Чем могу помочь? Клиент: Хочу открыть вклад на шесть месяцев. Сотрудник: Подскажите, какую сумму вы планируете разместить? Клиент: Пятьсот тысяч рублей. Сотрудник: Для этой суммы подходит вклад с фиксированной ставкой. Проценты начисляются ежемесячно. Клиент: Хорошо, я подумаю. Сотрудник: Я не согласовала с вами следующий шаг. Спасибо за звонок, до свидания.",
+  "utterances": [
+    {
+      "sequence_number": 0,
+      "speaker_role": "employee",
+      "speaker_id": 1,
+      "channel": 1,
+      "text": "Добрый день! Меня зовут Анна, Сбербанк. Чем могу помочь?",
+      "normalized_text": "Добрый день! Меня зовут Анна, Сбербанк. Чем могу помочь?",
+      "start_ms": 0,
+      "end_ms": 9000,
+      "emotions": {
+        "positive": 0.7,
+        "neutral": 0.3,
+        "negative": 0.0
+      },
+      "word_alignments": []
+    },
+    {
+      "sequence_number": 1,
+      "speaker_role": "client",
+      "speaker_id": 2,
+      "channel": 2,
+      "text": "Хочу открыть вклад на шесть месяцев.",
+      "normalized_text": "Хочу открыть вклад на шесть месяцев.",
+      "start_ms": 10000,
+      "end_ms": 18000,
+      "emotions": {
+        "positive": 0.2,
+        "neutral": 0.8,
+        "negative": 0.0
+      },
+      "word_alignments": []
+    },
+    {
+      "sequence_number": 2,
+      "speaker_role": "employee",
+      "speaker_id": 1,
+      "channel": 1,
+      "text": "Подскажите, какую сумму вы планируете разместить?",
+      "normalized_text": "Подскажите, какую сумму вы планируете разместить?",
+      "start_ms": 19000,
+      "end_ms": 28000,
+      "emotions": null,
+      "word_alignments": []
+    },
+    {
+      "sequence_number": 3,
+      "speaker_role": "client",
+      "speaker_id": 2,
+      "channel": 2,
+      "text": "Пятьсот тысяч рублей.",
+      "normalized_text": "Пятьсот тысяч рублей.",
+      "start_ms": 29000,
+      "end_ms": 35000,
+      "emotions": null,
+      "word_alignments": []
+    },
+    {
+      "sequence_number": 4,
+      "speaker_role": "employee",
+      "speaker_id": 1,
+      "channel": 1,
+      "text": "Для этой суммы подходит вклад с фиксированной ставкой. Проценты начисляются ежемесячно.",
+      "normalized_text": "Для этой суммы подходит вклад с фиксированной ставкой. Проценты начисляются ежемесячно.",
+      "start_ms": 36000,
+      "end_ms": 56000,
+      "emotions": null,
+      "word_alignments": []
+    },
+    {
+      "sequence_number": 5,
+      "speaker_role": "client",
+      "speaker_id": 2,
+      "channel": 2,
+      "text": "Хорошо, я подумаю.",
+      "normalized_text": "Хорошо, я подумаю.",
+      "start_ms": 57000,
+      "end_ms": 63000,
+      "emotions": null,
+      "word_alignments": []
+    },
+    {
+      "sequence_number": 6,
+      "speaker_role": "employee",
+      "speaker_id": 1,
+      "channel": 1,
+      "text": "Я не согласовала с вами следующий шаг. Спасибо за звонок, до свидания.",
+      "normalized_text": "Я не согласовала с вами следующий шаг. Спасибо за звонок, до свидания.",
+      "start_ms": 64000,
+      "end_ms": 78000,
+      "emotions": null,
+      "word_alignments": []
+    }
+  ],
+  "source_metadata": {
+    "source": "manual-work-e2e"
+  },
+  "encrypted": false
+}

@@ -14,7 +14,7 @@ class AnalyzerStepResult(BaseModel):
 
 
 class ExternalAnalyzerResponse(BaseModel):
-    """Контракт ответа внешнего Audio или FAQ Analyzer."""
+    """Контракт ответа внешнего Audio или Factor Analyzer."""
 
     model_config = ConfigDict(extra="forbid")
 
