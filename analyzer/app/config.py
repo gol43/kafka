@@ -41,6 +41,23 @@ class Settings(BaseSettings):
     postgres_max_overflow: int = Field(default=20, ge=0)
     postgres_pool_recycle_seconds: int = Field(default=3600, ge=60)
 
+    efs_vip_km_manager_ids: Annotated[set[str], NoDecode] = Field(
+        default_factory=set,
+        validation_alias="EFS_VIP_KM_MANAGER_IDS",
+    )
+    efs_akm_vip_manager_ids: Annotated[set[str], NoDecode] = Field(
+        default_factory=set,
+        validation_alias="EFS_AKM_VIP_MANAGER_IDS",
+    )
+    efs_vip_dsb_manager_ids: Annotated[set[str], NoDecode] = Field(
+        default_factory=set,
+        validation_alias="EFS_VIP_DSB_MANAGER_IDS",
+    )
+    efs_vip_tfs_manager_ids: Annotated[set[str], NoDecode] = Field(
+        default_factory=set,
+        validation_alias="EFS_VIP_TFS_MANAGER_IDS",
+    )
+
     worker_poll_interval_seconds: float = Field(default=30, gt=0)
     worker_claim_limit: int = Field(default=100, ge=1)
     dialog_pipeline_concurrency: int = Field(default=10, ge=1)
@@ -106,12 +123,13 @@ class Settings(BaseSettings):
     dashboard_enabled: bool = True
     dashboard_cron_hour_utc: int = Field(default=18, ge=0, le=23)
     dashboard_wait_interval_seconds: float = Field(default=30, gt=0)
+    dashboard_manager_batch_size: int = Field(default=100, ge=1, le=1000)
+    dashboard_cleanup_batch_size: int = Field(default=1000, ge=1, le=10000)
     metric_rolling_window_days: int = Field(default=30, ge=1)
     risk_rolling_window_days: int = Field(default=10, ge=1)
     strength_min_percent: float = Field(default=80, ge=0, le=100)
     strengths_limit: int = Field(default=3, ge=1)
     improvements_limit: int = Field(default=3, ge=1)
-    risk_clients_limit: int = Field(default=5, ge=1)
     latest_communications_limit: int = Field(default=5, ge=1)
     communications_max_limit: int = Field(default=100, ge=1)
     metric_failed_communications_limit: int = Field(default=3, ge=1)
@@ -166,6 +184,10 @@ class Settings(BaseSettings):
         "prompt_analyzer_manager_ids",
         "audio_analyzer_manager_ids",
         "factor_analyzer_manager_ids",
+        "efs_vip_km_manager_ids",
+        "efs_akm_vip_manager_ids",
+        "efs_vip_dsb_manager_ids",
+        "efs_vip_tfs_manager_ids",
         mode="before",
     )
     @classmethod
@@ -230,7 +252,44 @@ class Settings(BaseSettings):
             raise ValueError("Для Audio Analyzer требуется AUDIO_ANALYZER_URL")
         if self.factor_analyzer_manager_ids and not self.factor_analyzer_url:
             raise ValueError("Для Factor Analyzer требуется FACTOR_ANALYZER_URL")
+        role_sets = {
+            "EFS_VIP_KM": self.efs_vip_km_manager_ids,
+            "EFS_AKM_VIP": self.efs_akm_vip_manager_ids,
+            "EFS_VIP_DSB": self.efs_vip_dsb_manager_ids,
+            "EFS_VIP_TFS": self.efs_vip_tfs_manager_ids,
+        }
+        seen: dict[str, str] = {}
+        for role, manager_ids in role_sets.items():
+            for manager_id in manager_ids:
+                previous_role = seen.get(manager_id)
+                if previous_role:
+                    raise ValueError(
+                        f"Менеджер {manager_id} указан в ролях "
+                        f"{previous_role} и {role}"
+                    )
+                seen[manager_id] = role
+        missing_roles = self.analyzed_manager_ids - set(seen)
+        if missing_roles:
+            raise ValueError(
+                "Каждый анализируемый менеджер должен иметь роль: "
+                f"{sorted(missing_roles)}"
+            )
         return self
+
+    def static_manager_roles(self) -> dict[str, str]:
+        """Возвращает менеджеров и роли из четырёх ENV-списков."""
+
+        role_sets = {
+            "EFS_VIP_KM": self.efs_vip_km_manager_ids,
+            "EFS_AKM_VIP": self.efs_akm_vip_manager_ids,
+            "EFS_VIP_DSB": self.efs_vip_dsb_manager_ids,
+            "EFS_VIP_TFS": self.efs_vip_tfs_manager_ids,
+        }
+        return {
+            manager_id: role
+            for role, manager_ids in role_sets.items()
+            for manager_id in manager_ids
+        }
 
 
 @lru_cache(maxsize=1)

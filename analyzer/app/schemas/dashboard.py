@@ -35,3 +35,4 @@ class DialogReportResponse(BaseModel):
     type: str
     score: float
     deviations_count: int = Field(alias="deviationsCount")
+    risks: list[dict] = Field(default_factory=list)

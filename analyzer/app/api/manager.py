@@ -97,13 +97,23 @@ async def get_dialogs(
     date_from: Date | None = None,
     date_to: Date | None = None,
     type: Literal["call"] | None = None,
-    limit: Annotated[int, Query(ge=1, le=100)] = 5,
+    limit: Annotated[int | None, Query(ge=1)] = None,
 ):
     del type
+    settings = request.app.state.settings
+    effective_limit = limit or settings.latest_communications_limit
+    if effective_limit > settings.communications_max_limit:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "limit не должен превышать "
+                f"{settings.communications_max_limit}"
+            ),
+        )
     return await request.app.state.manager_service.dialogs(
         manager_id=normalize_manager_id(manager_id),
         report_date=date,
-        limit=limit,
+        limit=effective_limit,
         client_epk=client_epk,
         date_from=date_from,
         date_to=date_to,

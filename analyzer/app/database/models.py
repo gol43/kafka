@@ -70,6 +70,7 @@ class AnalysisTask(Base):
     __table_args__ = (
         UniqueConstraint("call_id", name="uq_analysis_task_call"),
         Index("ix_analysis_tasks_status_created", "status", "created_at"),
+        Index("ix_analysis_tasks_status_claimed", "status", "claimed_at"),
         {"schema": SCHEMA},
     )
 
@@ -80,6 +81,7 @@ class AnalysisTask(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="waiting")
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_code: Mapped[str | None] = mapped_column(String(128))
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -97,6 +99,7 @@ class DialogReport(Base):
 
     __tablename__ = "dialog_reports"
     __table_args__ = (
+        Index("ix_dialog_reports_work_manager", "work_date", "manager_id"),
         Index(
             "ix_dialog_reports_manager_work_occurred",
             "manager_id",
@@ -155,13 +158,39 @@ class DashboardAggregate(Base):
     __table_args__ = (
         UniqueConstraint("manager_id", "aggregate_date", name="uq_dashboard_aggregate"),
         Index("ix_dashboard_aggregates_date", "aggregate_date"),
+        Index(
+            "ix_dashboard_aggregates_manager_date",
+            "manager_id",
+            "aggregate_date",
+        ),
         {"schema": SCHEMA},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     manager_id: Mapped[str] = mapped_column(String(8), nullable=False)
     aggregate_date: Mapped[date] = mapped_column(Date, nullable=False)
-    data: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    manager_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    dialogs_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    dialog_score_sum: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    dialog_score_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    daily_metrics: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    daily_risks: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    rolling_30_metrics: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
+    weekly_metrics: Mapped[dict | None] = mapped_column(JSONB)
+    quarter_score_data: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
+    month_score_data: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -181,6 +210,13 @@ class DashboardSnapshot(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     manager_id: Mapped[str] = mapped_column(String(8), nullable=False)
     report_date: Mapped[date] = mapped_column(Date, nullable=False)
+    manager_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_date: Mapped[date] = mapped_column(Date, nullable=False)
+    carried_forward: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
     q_score_block: Mapped[dict] = mapped_column(JSONB, nullable=False)
     client_risks_block: Mapped[list] = mapped_column(JSONB, nullable=False)
     client_risk_details: Mapped[dict] = mapped_column(JSONB, nullable=False)

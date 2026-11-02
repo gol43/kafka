@@ -1,6 +1,6 @@
 from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.database.connection import session_scope
@@ -154,24 +154,18 @@ class DialogRepository:
                 dialog.status = "failed"
                 dialog.error_code = error_code
 
-    async def pending_before_cutoff(self, work_date: date, cutoff: datetime) -> int:
-        async with session_scope() as session:
-            return int(
-                await session.scalar(
-                    select(func.count())
-                    .select_from(Dialog)
-                    .where(
-                        Dialog.work_date == work_date,
-                        Dialog.received_at < cutoff,
-                        Dialog.status.in_(("waiting", "processing")),
-                    )
-                )
-                or 0
-            )
+    async def cleanup_expired(self, now: datetime, batch_size: int) -> None:
+        await self._delete_expired(Dialog, now, batch_size)
+        await self._delete_expired(DialogReport, now, batch_size)
 
-    async def cleanup_expired(self, now: datetime) -> None:
-        async with session_scope() as session:
-            await session.execute(delete(Dialog).where(Dialog.expires_at < now))
-            await session.execute(
-                delete(DialogReport).where(DialogReport.expires_at < now)
-            )
+    @staticmethod
+    async def _delete_expired(model, now: datetime, batch_size: int) -> None:
+        while True:
+            async with session_scope() as session:
+                ids = select(model.call_id).where(model.expires_at < now).limit(batch_size)
+                result = await session.execute(
+                    delete(model).where(model.call_id.in_(ids)).returning(model.call_id)
+                )
+                deleted = len(result.scalars().all())
+            if deleted < batch_size:
+                return

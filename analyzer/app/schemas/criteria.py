@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class CriterionDefinition(BaseModel):
@@ -38,3 +38,11 @@ class CriterionDefinition(BaseModel):
     enabled: bool = True
     prompt_supported: bool = True
     topic_gate: bool = False
+
+    @model_validator(mode="after")
+    def validate_risk_severity(self) -> "CriterionDefinition":
+        if self.block == "risk" and self.severity not in {"high", "medium", "low"}:
+            raise ValueError(
+                "Risk-критерий допускает только severity high, medium или low"
+            )
+        return self

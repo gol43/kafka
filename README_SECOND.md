@@ -78,9 +78,9 @@ curl.exe "http://localhost:8082/manager/dialogs/manual-deposit-001"
 curl.exe -X POST "http://localhost:8082/analysis/run/dashboard?date=2026-10-29"
 ```
 
-В production тот же процесс запускается в `18:00 UTC`. Перед расчётом он ждёт
-все `waiting/processing` задачи этого дня, полученные до cutoff. Failed-задачи
-не блокируют расчёт и в витрину не входят.
+В production тот же процесс запускается в `18:00 UTC`. Оставшиеся `waiting`
+переносятся на следующий рабочий день. Расчёт ждёт только `processing`, которые
+worker успел начать до cutoff. Failed-задачи не блокируют витрину.
 
 ## Восемь GET
 

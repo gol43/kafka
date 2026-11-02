@@ -59,9 +59,12 @@ class AnalysisWorker:
                     await self._tasks.recover_processing()
                     recovered = True
 
+                now = datetime.now(UTC)
                 tasks = await self._tasks.claim(
                     self._claim_limit,
-                    datetime.now(UTC).date(),
+                    now.date(),
+                    now,
+                    self._settings.dashboard_cron_hour_utc,
                 )
             except Exception as exc:  # noqa: BLE001
                 recovered = False

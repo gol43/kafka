@@ -1,6 +1,6 @@
 from datetime import UTC, date, datetime, time, timedelta
 
-from sqlalchemy import distinct, select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.database.connection import session_scope
@@ -16,34 +16,66 @@ class DialogReportRepository:
             row = await session.get(DialogReport, call_id)
             return DialogReportEntity.model_validate(row) if row else None
 
-    async def for_work_date(
+    async def for_work_date_many(
         self,
-        manager_id: str,
+        manager_ids: list[str],
         work_date: date,
-    ) -> list[DialogReportEntity]:
+    ) -> dict[str, list[DialogReportEntity]]:
+        result = {manager_id: [] for manager_id in manager_ids}
+        if not manager_ids:
+            return result
         async with session_scope() as session:
             rows = (
                 await session.scalars(
                     select(DialogReport)
                     .where(
-                        DialogReport.manager_id == manager_id,
+                        DialogReport.manager_id.in_(manager_ids),
                         DialogReport.work_date == work_date,
                     )
                     .order_by(DialogReport.occurred_at)
                 )
             ).all()
-            return [DialogReportEntity.model_validate(row) for row in rows]
+        for row in rows:
+            result[row.manager_id].append(DialogReportEntity.model_validate(row))
+        return result
 
-    async def manager_ids_through(self, report_date: date) -> set[str]:
-        """Возвращает только менеджеров, у которых уже есть готовые отчёты."""
-
-        async with session_scope() as session:
-            values = await session.scalars(
-                select(distinct(DialogReport.manager_id)).where(
-                    DialogReport.work_date <= report_date,
+    async def latest_for_managers(
+        self,
+        manager_ids: list[str],
+        report_date: date,
+        limit: int,
+    ) -> dict[str, list[DialogReportEntity]]:
+        result = {manager_id: [] for manager_id in manager_ids}
+        if not manager_ids:
+            return result
+        ranked = (
+            select(
+                DialogReport.call_id.label("call_id"),
+                func.row_number()
+                .over(
+                    partition_by=DialogReport.manager_id,
+                    order_by=DialogReport.occurred_at.desc(),
                 )
+                .label("row_number"),
             )
-            return set(values.all())
+            .where(
+                DialogReport.manager_id.in_(manager_ids),
+                DialogReport.work_date <= report_date,
+            )
+            .subquery()
+        )
+        async with session_scope() as session:
+            rows = (
+                await session.scalars(
+                    select(DialogReport)
+                    .join(ranked, ranked.c.call_id == DialogReport.call_id)
+                    .where(ranked.c.row_number <= limit)
+                    .order_by(DialogReport.manager_id, DialogReport.occurred_at.desc())
+                )
+            ).all()
+        for row in rows:
+            result[row.manager_id].append(DialogReportEntity.model_validate(row))
+        return result
 
     async def upsert_test_report(self, values: dict) -> None:
         """Кладёт готовый fixture-отчёт без обхода dashboard-математики."""

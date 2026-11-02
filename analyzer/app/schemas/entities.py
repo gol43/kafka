@@ -32,6 +32,7 @@ class AnalysisTaskEntity(BaseModel):
     id: uuid.UUID
     call_id: str
     attempt_count: int = 0
+    claimed_at: datetime | None = None
 
 
 class DialogReportEntity(BaseModel):

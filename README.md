@@ -125,7 +125,7 @@ Analyzer не сохраняет ФИО, реплики, эмоции и тай�
 
 ## 4. Фильтры до базы данных
 
-[`DialogIntakeService.accept()`](analyzer/app/services/dialog_intake.py)
+[`DialogIntakeService.accept()`](analyzer/app/services/dialog_analysis/dialog_intake.py)
 проверяет вход в следующем порядке.
 
 ### 4.1. Длительность
@@ -136,7 +136,7 @@ Analyzer не сохраняет ФИО, реплики, эмоции и тай�
 ### 4.2. Рабочий календарь
 
 Правило находится в
-[`calendar_policy.py`](analyzer/app/services/calendar_policy.py):
+[`calendar_policy.py`](analyzer/app/services/dialog_analysis/calendar_policy.py):
 
 | Время получения UTC | Результат |
 |---|---|
@@ -186,7 +186,7 @@ status, error_code, версии анализа, timestamps, expires_at
 
 ## 6. Worker и параллельность
 
-[`AnalysisWorker`](analyzer/app/services/analysis_worker.py) запускается в
+[`AnalysisWorker`](analyzer/app/services/dialog_analysis/analysis_worker.py) запускается в
 lifespan FastAPI и бесконечно:
 
 1. восстанавливает `processing` в `waiting` после рестарта;
@@ -209,7 +209,7 @@ lifespan FastAPI и бесконечно:
 ## 7. Три обязательных LLM-запроса
 
 Явная последовательность находится в
-[`PromptDialogAnalyzer.analyze()`](analyzer/app/services/prompt_dialog_analyzer.py):
+[`PromptDialogAnalyzer.analyze()`](analyzer/app/services/dialog_analysis/prompt_dialog_analyzer.py):
 
 ```python
 hygiene_response = await hygiene_agent.analyze(cleaned_text)
@@ -268,7 +268,7 @@ Risk Analyzer всегда выполняется отдельно. Сейчас
 ## 9. Подсчёт одного диалога
 
 Математика находится в
-[`scoring.py`](analyzer/app/services/scoring.py), модель ничего не считает:
+[`scoring.py`](analyzer/app/services/dialog_analysis/scoring.py), модель ничего не считает:
 
 ```text
 block score = 100 - сумма штрафов критериев со score=0
@@ -282,8 +282,8 @@ block score = 100 - сумма штрафов критериев со score=0
 ```
 
 Результат popup формируется один раз в
-[`dialog_report_builder.py`](analyzer/app/services/dialog_report_builder.py).
-Там уже готовы итоговый score, количество отклонений, самый важный риск,
+[`dialog_report_builder.py`](analyzer/app/services/dialog_analysis/dialog_report_builder.py).
+Там уже готовы итоговый score, количество отклонений, все названия выявленных рисков,
 top-3 strengths и top-3 improvements.
 
 ## 10. Атомарное завершение
@@ -312,34 +312,49 @@ task и dialog остаются для диагностики и ручного 
 
 ## 11. Сборка dashboard
 
-[`DashboardScheduler`](analyzer/app/services/dashboard_scheduler.py) срабатывает
-в `DASHBOARD_CRON_HOUR_UTC=18`. Он фиксирует cutoff и ждёт, пока все полученные
-до cutoff задачи рабочей даты выйдут из `waiting/processing`.
+[`DashboardScheduler`](analyzer/app/services/dashboard/dashboard_scheduler.py) срабатывает
+в `DASHBOARD_CRON_HOUR_UTC=18`. Он переносит оставшиеся `waiting` на следующий
+рабочий день и ждёт только `processing`, которые worker успел забрать до cutoff.
 
-Затем [`DashboardBuilder`](analyzer/app/services/dashboard_builder.py):
+Затем [`DashboardBuilder`](analyzer/app/services/dashboard/dashboard_builder.py):
 
-1. читает `dialog_reports` только текущей рабочей даты;
-2. сохраняет дневные суммы метрик в `dashboard_aggregates`;
-3. строит 30-дневное окно из дневных aggregates, а не из сырых reports;
-4. считает квартальный личный Q-score;
-5. считает командную медиану;
-6. в пятницу сохраняет недельные проценты метрик;
-7. в последний рабочий день месяца сохраняет месячный Q-score;
-8. собирает готовый `dashboard_snapshots`.
+1. получает состав менеджеров и роли из четырёх ENV-списков;
+2. пакетами читает `dialog_reports` и историю aggregates через `manager_id IN (...)`;
+3. сохраняет дневные суммы метрик в `dashboard_aggregates`;
+4. строит 30-дневное окно из дневных aggregates, а не из сырых reports;
+5. считает квартальный личный Q-score и медиану только внутри роли;
+6. в пятницу сохраняет проценты всех метрик за завершённую неделю;
+7. сохраняет месячный Q-score и возвращает последние пять месяцев;
+8. bulk-upsert-ом собирает готовые `dashboard_snapshots`.
+
+ENV-списки читаются один раз при запуске Analyzer. Обработка идёт батчами по
+`DASHBOARD_MANAGER_BATCH_SIZE`, поэтому в памяти нет полной пятимесячной истории
+сразу для всех сотрудников. Если у менеджера в рабочий день нет диалогов,
+создаётся новая строка snapshot с последним готовым значением, `source_date`
+исходного snapshot и `carried_forward=true`. Если истории ещё нет — создаётся
+нулевая витрина.
 
 LLM при построении витрины не вызывается.
 
 ### Q-score
 
 Личный Q-score — средняя оценка завершённых диалогов с начала текущего квартала
-по дату snapshot. Командный результат — медиана личных результатов всех
-настроенных менеджеров. Месячные точки хранятся в JSONB aggregate.
+по дату snapshot. Командный результат — медиана личных результатов менеджеров
+той же роли: `EFS_VIP_KM`, `EFS_AKM_VIP`, `EFS_VIP_DSB` или `EFS_VIP_TFS`.
+График возвращает пять последних месяцев, включая текущий; отсутствующее
+значение равно нулю.
 
 ### Риски
 
-Окно задаётся `RISK_ROLLING_WINDOW_DAYS=10`. Выбирается максимум пять
-уникальных клиентов. У клиента показывается один самый приоритетный риск:
-сначала критичность, затем свежесть и количество повторений.
+Окно задаётся `RISK_ROLLING_WINDOW_DAYS=10`. Лимита клиентов на backend нет.
+У одного клиента сохраняются все разные риски. Итоговый уровень клиента:
+
+- `high`, если найден хотя бы один высокий риск;
+- `medium`, если высокого нет, но найден средний риск;
+- `low`, если найдены только низкие риски.
+
+Popup возвращает для каждого риска последнюю цитату, последний звонок,
+количество разных коммуникаций и рекомендацию.
 
 ### Strengths и improvements
 
@@ -352,10 +367,12 @@ percent = count(score=1) / count(all applicable dialogs) * 100
 - `percent >= 80` → strengths;
 - `percent < 80` → improvements;
 - в каждом блоке top-3;
-- `delta` сравнивает текущий расчёт с предыдущим дневным snapshot.
+- `delta = previousPercent - currentPercent`; предыдущим считается прошлый
+  рабочий день.
 
-Popup improvement получает недельные точки и список звонков, где метрика имела
-`score=0`.
+Popup improvement получает четыре последние завершённые недели (понедельник —
+воскресенье, фактические звонки понедельник — пятница) и список звонков, где
+метрика имела `score=0`.
 
 ## 12. Пять таблиц
 
@@ -368,11 +385,13 @@ Popup improvement получает недельные точки и список
 | `analyzer.dashboard_snapshots` | Одна строка manager/date с готовыми блоками UI |
 
 Отдельной `metric_history` нет. Метрики одного менеджера за дату хранятся одним
-JSONB-объектом. TTL всех таблиц — `DATA_TTL_DAYS=183`.
+JSONB-объектом. После окончания расчётного окна тяжёлые дневные риски,
+метрические нарушения и старые недельные точки очищаются, а компактные
+квартальные/месячные суммы остаются. TTL всех таблиц — `DATA_TTL_DAYS=183`.
 
-Миграция новой модели:
-[`analyzer_0004`](analyzer/alembic/versions/0004_two_process_architecture.py).
-Она намеренно удаляет старые экспериментальные таблицы Analyzer.
+Актуальная миграция:
+[`analyzer_0005`](analyzer/alembic/versions/0005_dashboard_roles_and_cutoff.py).
+Она добавляет роли, cutoff worker-а и отдельные JSONB-колонки без новых таблиц.
 
 ## 13. Восемь GET-ручек
 
@@ -426,7 +445,7 @@ POST /analysis/run/dashboard?date=2026-10-29
 | Три LLM-вызова | Текст и текущие ответы | Вход и task остаются |
 | Успешный commit | Готовый payload | `dialog_reports`; вход и task удалены |
 | Ошибка | Exception освобождается | `dialogs/task=failed` |
-| Ночная сборка | Данные одного менеджера | Aggregate и snapshot JSONB |
+| Ночная сборка | Один ограниченный batch менеджеров | Aggregate и snapshot JSONB |
 | GET | Один готовый объект | Один короткий SELECT |
 
 ## 16. ENV
@@ -452,15 +471,21 @@ DATA_TTL_DAYS=183
 DASHBOARD_ENABLED=true
 DASHBOARD_CRON_HOUR_UTC=18
 DASHBOARD_WAIT_INTERVAL_SECONDS=30
+DASHBOARD_MANAGER_BATCH_SIZE=100
+DASHBOARD_CLEANUP_BATCH_SIZE=1000
+EFS_VIP_KM_MANAGER_IDS=00000001,00000002
+EFS_AKM_VIP_MANAGER_IDS=
+EFS_VIP_DSB_MANAGER_IDS=
+EFS_VIP_TFS_MANAGER_IDS=
 METRIC_ROLLING_WINDOW_DAYS=30
 RISK_ROLLING_WINDOW_DAYS=10
 STRENGTH_MIN_PERCENT=80
 STRENGTHS_LIMIT=3
 IMPROVEMENTS_LIMIT=3
-RISK_CLIENTS_LIMIT=5
 LATEST_COMMUNICATIONS_LIMIT=5
 COMMUNICATIONS_MAX_LIMIT=100
 ```
 
 Полный список находится в [`.env.example`](.env.example) и
-[`analyzer/app/config.py`](analyzer/app/config.py).
+[`analyzer/app/config.py`](analyzer/app/config.py). Короткие русские пояснения
+по группам находятся в [`ENVIRONMENT.md`](ENVIRONMENT.md).

@@ -1,6 +1,6 @@
 from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from app.database.connection import session_scope
@@ -21,7 +21,7 @@ class AnalysisTaskRepository:
             await session.execute(
                 update(AnalysisTask)
                 .where(AnalysisTask.status == "processing")
-                .values(status="waiting")
+                .values(status="waiting", claimed_at=None)
             )
             await session.execute(
                 update(Dialog)
@@ -42,8 +42,18 @@ class AnalysisTaskRepository:
                 .on_conflict_do_nothing(index_elements=["call_id"])
             )
 
-    async def claim(self, limit: int, current_work_date: date) -> list[AnalysisTaskEntity]:
+    async def claim(
+        self,
+        limit: int,
+        current_work_date: date,
+        now: datetime,
+        cutoff_hour_utc: int,
+    ) -> list[AnalysisTaskEntity]:
         """Берёт backlog до текущей рабочей даты через SKIP LOCKED."""
+
+        latest_date = current_work_date
+        if now.hour >= cutoff_hour_utc:
+            latest_date -= timedelta(days=1)
 
         async with session_scope() as session:
             tasks = list(
@@ -53,7 +63,7 @@ class AnalysisTaskRepository:
                         .join(Dialog, Dialog.call_id == AnalysisTask.call_id)
                         .where(
                             AnalysisTask.status == "waiting",
-                            Dialog.work_date <= current_work_date,
+                            Dialog.work_date <= latest_date,
                         )
                         .order_by(Dialog.work_date, AnalysisTask.created_at)
                         .limit(limit)
@@ -65,6 +75,7 @@ class AnalysisTaskRepository:
             for task in tasks:
                 task.status = "processing"
                 task.error_code = None
+                task.claimed_at = now
             if call_ids:
                 await session.execute(
                     update(Dialog)
@@ -101,12 +112,78 @@ class AnalysisTaskRepository:
                 return False
             task.status = "waiting"
             task.error_code = None
+            task.claimed_at = None
             dialog.status = "waiting"
             dialog.error_code = None
             return True
 
-    async def cleanup_expired(self, now: datetime) -> None:
+    async def rollover_waiting(
+        self,
+        work_date: date,
+        next_date: date,
+        batch_size: int,
+    ) -> int:
+        """Переносит не начатые к cutoff диалоги на следующий рабочий день."""
+
         async with session_scope() as session:
-            await session.execute(
-                delete(AnalysisTask).where(AnalysisTask.expires_at < now)
+            rows = list(
+                (
+                    await session.scalars(
+                        select(AnalysisTask)
+                        .join(Dialog, Dialog.call_id == AnalysisTask.call_id)
+                        .where(
+                            AnalysisTask.status == "waiting",
+                            Dialog.work_date == work_date,
+                        )
+                        .limit(batch_size)
+                        .with_for_update()
+                    )
+                ).all()
             )
+            call_ids = [row.call_id for row in rows]
+            if call_ids:
+                await session.execute(
+                    update(Dialog)
+                    .where(Dialog.call_id.in_(call_ids))
+                    .values(work_date=next_date)
+                )
+            return len(call_ids)
+
+    async def processing_before_cutoff(
+        self,
+        work_date: date,
+        cutoff: datetime,
+    ) -> int:
+        """Считает только задания, которые реально стартовали до cutoff."""
+
+        async with session_scope() as session:
+            return int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(AnalysisTask)
+                    .join(Dialog, Dialog.call_id == AnalysisTask.call_id)
+                    .where(
+                        AnalysisTask.status == "processing",
+                        AnalysisTask.claimed_at < cutoff,
+                        Dialog.work_date == work_date,
+                    )
+                )
+                or 0
+            )
+
+    async def cleanup_expired(self, now: datetime, batch_size: int) -> None:
+        while True:
+            async with session_scope() as session:
+                ids = (
+                    select(AnalysisTask.id)
+                    .where(AnalysisTask.expires_at < now)
+                    .limit(batch_size)
+                )
+                result = await session.execute(
+                    delete(AnalysisTask)
+                    .where(AnalysisTask.id.in_(ids))
+                    .returning(AnalysisTask.id)
+                )
+                deleted = len(result.scalars().all())
+            if deleted < batch_size:
+                return

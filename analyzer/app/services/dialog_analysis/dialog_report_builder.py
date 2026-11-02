@@ -62,7 +62,10 @@ def build_dialog_report(
         "type": "call",
         "score": final_score,
         "deviationsCount": deviations_count,
-        "risk": _risk_payload(detected_risks[0]) if detected_risks else None,
+        "risks": [
+            {"code": item["code"], "title": item["title"]}
+            for item in detected_risks
+        ],
         "strengths": {
             "text": positive_text,
             "metrics": [
@@ -81,17 +84,6 @@ def build_dialog_report(
             for item in failed
         ],
     }
-
-
-def _risk_payload(item: dict) -> dict:
-    return {
-        "code": item["code"],
-        "title": item["title"],
-        "severity": item["severity"],
-        "quote": item["quote"],
-        "recommendation": item["recommendation"],
-    }
-
 
 def _criterion_sort_key(item: dict) -> tuple[int, int, str]:
     return (

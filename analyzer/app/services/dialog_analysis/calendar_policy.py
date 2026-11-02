@@ -3,6 +3,15 @@ from datetime import UTC, date, datetime, timedelta
 UTC_CUTOFF_HOUR = 18  # Граница рабочего дня Analyzer.
 
 
+def next_work_date(value: date) -> date:
+    """Возвращает ближайший следующий день с понедельника по пятницу."""
+
+    result = value + timedelta(days=1)
+    while result.weekday() >= 5:
+        result += timedelta(days=1)
+    return result
+
+
 def resolve_work_date(received_at: datetime) -> date | None:
     value = received_at.astimezone(UTC)
     weekday = value.weekday()

@@ -109,7 +109,10 @@ class DashboardTestDataService:
                 "type": "call",
                 "score": score.final_score,
                 "deviationsCount": score.deviations_count,
-                "risk": detected_risks[0] if detected_risks else None,
+                "risks": [
+                    {"code": item["code"], "title": item["title"]}
+                    for item in detected_risks
+                ],
                 "strengths": {
                     "text": "Тестовые сильные стороны коммуникации.",
                     "metrics": passed[:3],

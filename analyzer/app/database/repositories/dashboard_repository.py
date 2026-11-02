@@ -1,6 +1,6 @@
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from app.database.connection import session_scope
@@ -8,118 +8,123 @@ from app.database.models import DashboardAggregate, DashboardSnapshot
 
 
 class DashboardRepository:
-    """Хранит дневную математику и готовые snapshot витрины."""
+    """Пакетно хранит дневную математику и готовые snapshot витрины."""
 
     def __init__(self, ttl_days: int) -> None:
         self._ttl = timedelta(days=ttl_days)
 
-    async def save_aggregate(
-        self,
-        manager_id: str,
-        aggregate_date: date,
-        data: dict,
-        now: datetime,
-    ) -> None:
+    async def save_aggregates(self, rows: list[dict], now: datetime) -> None:
+        if not rows:
+            return
+        values = [{**row, "expires_at": now + self._ttl} for row in rows]
         async with session_scope() as session:
-            statement = insert(DashboardAggregate).values(
-                manager_id=manager_id,
-                aggregate_date=aggregate_date,
-                data=data,
-                expires_at=now + self._ttl,
-            )
+            statement = insert(DashboardAggregate).values(values)
+            excluded = statement.excluded
             await session.execute(
                 statement.on_conflict_do_update(
                     constraint="uq_dashboard_aggregate",
                     set_={
-                        "data": statement.excluded.data,
+                        "manager_role": excluded.manager_role,
+                        "dialogs_count": excluded.dialogs_count,
+                        "dialog_score_sum": excluded.dialog_score_sum,
+                        "dialog_score_count": excluded.dialog_score_count,
+                        "daily_metrics": excluded.daily_metrics,
+                        "daily_risks": excluded.daily_risks,
+                        "rolling_30_metrics": excluded.rolling_30_metrics,
+                        "weekly_metrics": excluded.weekly_metrics,
+                        "quarter_score_data": excluded.quarter_score_data,
+                        "month_score_data": excluded.month_score_data,
                         "created_at": now,
-                        "expires_at": statement.excluded.expires_at,
+                        "expires_at": excluded.expires_at,
                     },
                 )
             )
 
-    async def aggregate(
-        self,
-        manager_id: str,
-        aggregate_date: date,
-    ) -> dict | None:
-        async with session_scope() as session:
-            row = await session.scalar(
-                select(DashboardAggregate).where(
-                    DashboardAggregate.manager_id == manager_id,
-                    DashboardAggregate.aggregate_date == aggregate_date,
-                )
-            )
-            return row.data if row else None
-
     async def aggregates_between(
         self,
-        manager_id: str,
+        manager_ids: list[str],
         start: date,
         end: date,
-    ) -> list[tuple[date, dict]]:
+    ) -> dict[str, list[tuple[date, dict]]]:
+        result = {manager_id: [] for manager_id in manager_ids}
+        if not manager_ids or start > end:
+            return result
         async with session_scope() as session:
             rows = (
                 await session.scalars(
                     select(DashboardAggregate)
                     .where(
-                        DashboardAggregate.manager_id == manager_id,
+                        DashboardAggregate.manager_id.in_(manager_ids),
                         DashboardAggregate.aggregate_date >= start,
                         DashboardAggregate.aggregate_date <= end,
                     )
-                    .order_by(DashboardAggregate.aggregate_date)
+                    .order_by(
+                        DashboardAggregate.manager_id,
+                        DashboardAggregate.aggregate_date,
+                    )
                 )
             ).all()
-            return [(row.aggregate_date, row.data) for row in rows]
+        for row in rows:
+            result[row.manager_id].append((row.aggregate_date, _aggregate_payload(row)))
+        return result
 
-    async def save_snapshot(
+    async def latest_snapshots_before(
         self,
-        *,
-        manager_id: str,
+        manager_ids: list[str],
         report_date: date,
-        q_score_block: dict,
-        client_risks_block: list,
-        client_risk_details: dict,
-        strengths_block: list,
-        improvements_block: list,
-        improvement_details: dict,
-        communications_block: list,
-        source_call_ids: list,
-        now: datetime,
-    ) -> None:
+    ) -> dict[str, DashboardSnapshot]:
+        if not manager_ids:
+            return {}
         async with session_scope() as session:
-            statement = insert(DashboardSnapshot).values(
-                manager_id=manager_id,
-                report_date=report_date,
-                q_score_block=q_score_block,
-                client_risks_block=client_risks_block,
-                client_risk_details=client_risk_details,
-                strengths_block=strengths_block,
-                improvements_block=improvements_block,
-                improvement_details=improvement_details,
-                communications_block=communications_block,
-                source_call_ids=source_call_ids,
-                expires_at=now + self._ttl,
-            )
+            rows = (
+                await session.scalars(
+                    select(DashboardSnapshot)
+                    .distinct(DashboardSnapshot.manager_id)
+                    .where(
+                        DashboardSnapshot.manager_id.in_(manager_ids),
+                        DashboardSnapshot.report_date < report_date,
+                    )
+                    .order_by(
+                        DashboardSnapshot.manager_id,
+                        DashboardSnapshot.report_date.desc(),
+                    )
+                )
+            ).all()
+        return {row.manager_id: row for row in rows}
+
+    async def save_snapshots(self, rows: list[dict], now: datetime) -> None:
+        if not rows:
+            return
+        values = [{**row, "expires_at": now + self._ttl} for row in rows]
+        async with session_scope() as session:
+            statement = insert(DashboardSnapshot).values(values)
+            excluded = statement.excluded
             await session.execute(
                 statement.on_conflict_do_update(
                     constraint="uq_dashboard_snapshot",
                     set_={
-                        "q_score_block": statement.excluded.q_score_block,
-                        "client_risks_block": statement.excluded.client_risks_block,
-                        "client_risk_details": statement.excluded.client_risk_details,
-                        "strengths_block": statement.excluded.strengths_block,
-                        "improvements_block": statement.excluded.improvements_block,
-                        "improvement_details": statement.excluded.improvement_details,
-                        "communications_block": statement.excluded.communications_block,
-                        "source_call_ids": statement.excluded.source_call_ids,
+                        "manager_role": excluded.manager_role,
+                        "source_date": excluded.source_date,
+                        "carried_forward": excluded.carried_forward,
+                        "q_score_block": excluded.q_score_block,
+                        "client_risks_block": excluded.client_risks_block,
+                        "client_risk_details": excluded.client_risk_details,
+                        "strengths_block": excluded.strengths_block,
+                        "improvements_block": excluded.improvements_block,
+                        "improvement_details": excluded.improvement_details,
+                        "communications_block": excluded.communications_block,
+                        "source_call_ids": excluded.source_call_ids,
                         "created_at": now,
-                        "expires_at": statement.excluded.expires_at,
+                        "expires_at": excluded.expires_at,
                     },
                 )
             )
 
-    async def snapshot(self, manager_id: str, report_date: date) -> DashboardSnapshot | None:
+    async def snapshot(
+        self,
+        manager_id: str,
+        report_date: date,
+    ) -> DashboardSnapshot | None:
         async with session_scope() as session:
             return await session.scalar(
                 select(DashboardSnapshot).where(
@@ -128,11 +133,73 @@ class DashboardRepository:
                 )
             )
 
-    async def cleanup_expired(self, now: datetime) -> None:
+    async def compact_history(
+        self,
+        report_date: date,
+        risk_days: int,
+        metric_days: int,
+        weekly_points: int,
+    ) -> None:
+        """Убирает тяжёлые JSON-детали после окончания их расчётного окна."""
+
         async with session_scope() as session:
             await session.execute(
-                delete(DashboardAggregate).where(DashboardAggregate.expires_at < now)
+                update(DashboardAggregate)
+                .where(
+                    DashboardAggregate.aggregate_date
+                    < report_date - timedelta(days=risk_days - 1),
+                    DashboardAggregate.daily_risks != [],
+                )
+                .values(daily_risks=[])
             )
             await session.execute(
-                delete(DashboardSnapshot).where(DashboardSnapshot.expires_at < now)
+                update(DashboardAggregate)
+                .where(
+                    DashboardAggregate.aggregate_date
+                    < report_date - timedelta(days=metric_days - 1),
+                    DashboardAggregate.daily_metrics != {},
+                )
+                .values(daily_metrics={}, rolling_30_metrics={})
             )
+            await session.execute(
+                update(DashboardAggregate)
+                .where(
+                    DashboardAggregate.aggregate_date
+                    < report_date - timedelta(days=weekly_points * 7 + 7),
+                    DashboardAggregate.weekly_metrics.is_not(None),
+                )
+                .values(weekly_metrics=None)
+            )
+
+    async def cleanup_expired(self, now: datetime, batch_size: int) -> None:
+        await self._delete_expired(DashboardAggregate, now, batch_size)
+        await self._delete_expired(DashboardSnapshot, now, batch_size)
+
+    @staticmethod
+    async def _delete_expired(model, now: datetime, batch_size: int) -> None:
+        while True:
+            async with session_scope() as session:
+                ids = select(model.id).where(model.expires_at < now).limit(batch_size)
+                result = await session.execute(
+                    delete(model).where(model.id.in_(ids)).returning(model.id)
+                )
+                deleted = len(result.scalars().all())
+            if deleted < batch_size:
+                return
+
+
+def _aggregate_payload(row: DashboardAggregate) -> dict:
+    return {
+        "managerRole": row.manager_role,
+        "daily": {
+            "dialogsCount": row.dialogs_count,
+            "dialogScoreSum": row.dialog_score_sum,
+            "dialogScoreCount": row.dialog_score_count,
+            "metrics": row.daily_metrics,
+            "risks": row.daily_risks,
+        },
+        "rolling30": {"metrics": row.rolling_30_metrics},
+        "week": row.weekly_metrics or {"completed": False},
+        "quarter": row.quarter_score_data,
+        "month": row.month_score_data,
+    }

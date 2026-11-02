@@ -1,5 +1,6 @@
 import asyncio
 from datetime import UTC, date, datetime, time
+import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -7,6 +8,9 @@ from app.config import Settings
 from app.database.repositories.analysis_task_repository import AnalysisTaskRepository
 from app.database.repositories.dialog_repository import DialogRepository
 from app.services.dashboard.dashboard_builder import DashboardBuilder
+from app.services.dialog_analysis.calendar_policy import next_work_date
+
+logger = logging.getLogger(__name__)
 
 
 class DashboardScheduler:
@@ -52,10 +56,32 @@ class DashboardScheduler:
             time(hour=self._settings.dashboard_cron_hour_utc),
             tzinfo=UTC,
         )
-        while await self._dialogs.pending_before_cutoff(target, cutoff):
+        moved_total = 0
+        while True:
+            moved = await self._tasks.rollover_waiting(
+                target,
+                next_work_date(target),
+                self._settings.dashboard_cleanup_batch_size,
+            )
+            moved_total += moved
+            if moved < self._settings.dashboard_cleanup_batch_size:
+                break
+        logger.info("Waiting moved date=%s count=%s", target, moved_total)
+
+        while True:
+            processing = await self._tasks.processing_before_cutoff(target, cutoff)
+            if not processing:
+                break
+            logger.info("Dashboard waits tasks count=%s", processing)
             await asyncio.sleep(self._settings.dashboard_wait_interval_seconds)
 
         await self._builder.rebuild(target)
         now = datetime.now(UTC)
-        await self._dialogs.cleanup_expired(now)
-        await self._tasks.cleanup_expired(now)
+        await self._dialogs.cleanup_expired(
+            now,
+            self._settings.dashboard_cleanup_batch_size,
+        )
+        await self._tasks.cleanup_expired(
+            now,
+            self._settings.dashboard_cleanup_batch_size,
+        )
