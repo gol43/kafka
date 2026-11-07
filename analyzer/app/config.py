@@ -68,6 +68,16 @@ class Settings(BaseSettings):
     gigachat_max_concurrency: int = Field(alias="GIGACHAT_MAX_CONCURRENCY")
     gigachat_max_attempts: int = Field(alias="GIGACHAT_MAX_ATTEMPTS")
     gigachat_retry_base_seconds: float = Field(alias="GIGACHAT_RETRY_BASE_SECONDS")
+    gigachat_validation_max_attempts: int = Field(
+        default=3,
+        alias="GIGACHAT_VALIDATION_MAX_ATTEMPTS",
+        ge=1,
+    )
+    gigachat_validation_retry_seconds: float = Field(
+        default=1,
+        alias="GIGACHAT_VALIDATION_RETRY_SECONDS",
+        ge=0,
+    )
     gigachat_temperature: float | None = Field(alias="GIGACHAT_TEMPERATURE")
 
     efs_vip_km_manager_ids: Annotated[set[str], NoDecode] = Field(alias='EFS_VIP_KM_MANAGER_IDS')

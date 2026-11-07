@@ -31,7 +31,10 @@ async def rebuild_dashboard(
     request: Request,
     snapshot_date: Annotated[date | None, Query(alias="date")] = None,
 ) -> AcceptedResponse:
-    await request.app.state.dashboard_scheduler.rebuild(snapshot_date)
+    try:
+        await request.app.state.dashboard_scheduler.rebuild(snapshot_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return AcceptedResponse()
 
 

@@ -284,7 +284,7 @@ GET /api/v1.0/ai-q-score/manager/{manager_id}/q-score
 ```json
 {
   "personal": 84.0,
-  "teamMedian": 81.0,
+  "teamMedian": 81,
   "months": [
     {"year": 2026, "month": 11, "qScore": 84},
     {"year": 2026, "month": 10, "qScore": 82},

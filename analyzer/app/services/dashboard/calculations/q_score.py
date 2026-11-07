@@ -56,8 +56,12 @@ def team_medians(profiles, current: dict[str, dict], empty_score: int) -> dict:
 
     result = {}
     for role, values in by_role.items():
-        result[role] = float(median(values)) if values else float(empty_score)
+        result[role] = _round_median(median(values)) if values else empty_score
     return result
+
+
+def _round_median(value: float) -> int:
+    return int(value + 0.5)
 
 
 def _score_state(previous: dict | None, daily: dict, identity: dict) -> dict:

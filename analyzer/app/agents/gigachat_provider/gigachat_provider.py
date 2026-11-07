@@ -14,7 +14,6 @@ from app.agents.gigachat_provider.exceptions import (
     map_gigachat_error,
 )
 from app.config import Settings
-from app.metrics import GIGACHAT_ACTIVE, GIGACHAT_REQUESTS
 
 logger = logging.getLogger(__name__)
 
@@ -106,13 +105,7 @@ class GigaChatProvider(BaseGigaChatProvider):
         for attempt in range(1, self._retry_limit + 1):
             try:
                 async with self._semaphore:
-                    GIGACHAT_ACTIVE.inc()
-                    try:
-                        result = await operation()
-                        GIGACHAT_REQUESTS.labels(outcome="completed").inc()
-                        return result
-                    finally:
-                        GIGACHAT_ACTIVE.dec()
+                    return await operation()
 
             except GigaChatError as exc:
                 last_error = exc
@@ -126,7 +119,6 @@ class GigaChatProvider(BaseGigaChatProvider):
                     break
                 await asyncio.sleep(self._retry_delay)
 
-        GIGACHAT_REQUESTS.labels(outcome="failed").inc()
         raise GigaChatError(
             message="GigaChat request failed after all attempts",
             attempts=self._retry_limit,

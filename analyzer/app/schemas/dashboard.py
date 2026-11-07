@@ -16,7 +16,7 @@ class MonthQScore(ApiModel):
 
 class QScoreBlockResponse(ApiModel):
     personal: int = Field(ge=0, le=100)
-    team_median: float = Field(alias="teamMedian", ge=0, le=100)
+    team_median: int = Field(alias="teamMedian", ge=0, le=100)
     months: list[MonthQScore]
 
 

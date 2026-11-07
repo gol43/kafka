@@ -1,4 +1,3 @@
-import asyncio
 import logging
 
 from app.agents.prompt_analysis_agent import PromptAnalysisAgent
@@ -34,14 +33,9 @@ class PromptDialogAnalyzer:
 
     async def analyze(self, dialog: DialogEntity) -> AnalyzerStepResult:
         logger.info("Three prompt analyses started call_id=%s", dialog.call_id)
-        async with asyncio.TaskGroup() as tasks:
-            hygiene_task = tasks.create_task(self._analyze_hygiene(dialog))
-            deposit_task = tasks.create_task(self._analyze_deposit(dialog))
-            risk_task = tasks.create_task(self._analyze_risks(dialog))
-
-        hygiene_response = hygiene_task.result()
-        deposit_response = deposit_task.result()
-        risk_response = risk_task.result()
+        hygiene_response = await self._analyze_hygiene(dialog)
+        deposit_response = await self._analyze_deposit(dialog)
+        risk_response = await self._analyze_risks(dialog)
         logger.info("Three prompt analyses completed call_id=%s", dialog.call_id)
 
         score = calculate_dialog_score(

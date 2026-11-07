@@ -53,18 +53,24 @@ async def lifespan(app: FastAPI):
         provider,
         block="hygiene",
         log_responses=settings.log_llm_responses,
+        validation_max_attempts=settings.gigachat_validation_max_attempts,
+        validation_retry_seconds=settings.gigachat_validation_retry_seconds,
     )
     deposit_agent = PromptAnalysisAgent(
         prompt_loader,
         provider,
         block="deposit",
         log_responses=settings.log_llm_responses,
+        validation_max_attempts=settings.gigachat_validation_max_attempts,
+        validation_retry_seconds=settings.gigachat_validation_retry_seconds,
     )
     risk_agent = PromptAnalysisAgent(
         prompt_loader,
         provider,
         block="risk",
         log_responses=settings.log_llm_responses,
+        validation_max_attempts=settings.gigachat_validation_max_attempts,
+        validation_retry_seconds=settings.gigachat_validation_retry_seconds,
     )
 
     prompt_dialog_analyzer = PromptDialogAnalyzer(

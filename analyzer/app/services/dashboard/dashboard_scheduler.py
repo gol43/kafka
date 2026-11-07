@@ -60,7 +60,17 @@ class DashboardScheduler:
     async def rebuild(self, report_date: date | None = None) -> None:
         target = report_date or datetime.now(UTC).date()
         if target.weekday() >= 5:
-            return
+            manual_test_build = (
+                report_date is not None
+                and not self._settings.calendar_filter_enabled
+            )
+            if not manual_test_build:
+                if report_date is not None:
+                    raise ValueError(
+                        "Dashboard за выходной разрешён только при "
+                        "CALENDAR_FILTER_ENABLED=false"
+                    )
+                return
 
         async with self._dashboards.build_lock() as acquired:
             if not acquired:
