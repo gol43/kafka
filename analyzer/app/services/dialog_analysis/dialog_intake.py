@@ -1,10 +1,9 @@
-import logging
 from datetime import UTC, datetime
+import logging
 
 from app.config import Settings
 from app.database.repositories.dialog_repository import DialogRepository
 from app.schemas.dialogs import CleanedDialog
-from app.services.dialog_analysis.analysis_worker import AnalysisWorker
 from app.services.dialog_analysis.calendar_policy import resolve_work_date
 
 logger = logging.getLogger(__name__)
@@ -17,22 +16,15 @@ class DialogIntakeService:
         self,
         settings: Settings,
         repository: DialogRepository,
-        worker: AnalysisWorker,
     ) -> None:
         self._settings = settings
         self._repository = repository
-        self._worker = worker
 
     async def accept(self, payload: CleanedDialog) -> str:
         """Отбрасывает нерабочее время и менеджеров вне ENV-списка."""
-
         received_at = datetime.now(UTC)
         duration_seconds = payload.duration_seconds
-        if duration_seconds is None:
-            duration_seconds = max(
-                (item.end_ms for item in payload.utterances),
-                default=0,
-            ) // 1000
+
         if duration_seconds < self._settings.min_dialog_duration_seconds:
             logger.info("Dialog too short call_id=%s", payload.call_id)
             return "duration_filtered"
@@ -66,6 +58,5 @@ class DialogIntakeService:
             return "duplicate"
 
         logger.info("Dialog saved call_id=%s", payload.call_id)
-        await self._worker.enqueue(payload.call_id)
         logger.info("Dialog task created call_id=%s", payload.call_id)
         return "accepted"

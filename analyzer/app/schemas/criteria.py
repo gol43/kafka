@@ -9,20 +9,19 @@ class CriterionDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     code: str
-    title: str
-    description: str
-    rules: str
-    trigger: str
-    positive_definition: str
-    negative_definition: str
+    title_positive: str = Field(min_length=1)
+    title_negative: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    rules: str = Field(min_length=1)
+    trigger: str = Field(min_length=1)
+    positive_definition: str = Field(min_length=1)
+    negative_definition: str = Field(min_length=1)
     good_examples: list[str] = Field(default_factory=list)
     bad_examples: list[str] = Field(default_factory=list)
-    output_rule: str
+    output_rule: str = Field(min_length=1)
     penalty: int
-    critical: bool
-    block: Literal["general", "deposit", "risk"] = "general"
+    block: Literal["hygiene", "deposit", "risk"] = "hygiene"
     severity: Literal[
-        "fraud",
         "critical",
         "significant",
         "minor",
@@ -30,19 +29,12 @@ class CriterionDefinition(BaseModel):
         "high",
         "medium",
         "low",
-    ] = (
-        "minor"
-    )
+    ] = "minor"
     quote_required: bool = True
-    recommendation: str = ""
-    enabled: bool = True
-    prompt_supported: bool = True
-    topic_gate: bool = False
+    recommendation: str = Field(min_length=1)
 
-    @model_validator(mode="after")
-    def validate_risk_severity(self) -> "CriterionDefinition":
-        if self.block == "risk" and self.severity not in {"high", "medium", "low"}:
-            raise ValueError(
-                "Risk-критерий допускает только severity high, medium или low"
-            )
+    @model_validator(mode='after')
+    def validate_risk_severity(self):
+        if self.block == 'risk' and self.severity not in {'high', 'medium', 'low'}:
+            raise ValueError("risk can be only - high, medium or low")
         return self

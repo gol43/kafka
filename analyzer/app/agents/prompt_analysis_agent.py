@@ -1,4 +1,5 @@
 import logging
+
 from app.agents.gigachat_provider.base import BaseGigaChatProvider
 from app.agents.prompt_loader import PromptLoader
 from app.exceptions import InvalidAnalysisResultError
@@ -43,10 +44,12 @@ class PromptAnalysisAgent:
         dialog_text: str,
         block: str,
     ) -> None:
-        received_codes = [item.code for item in result.results]
-        expected_codes = {
-            item.code for item in self._prompts.criteria_by_block.get(block, ())
-        }
+        received_codes = []
+        for item in result.results:
+            received_codes.append(item.code)
+        expected_codes = set()
+        for item in self._prompts.criteria_by_block.get(block, ()):
+            expected_codes.add(item.code)
 
         if len(received_codes) != len(set(received_codes)):
             raise InvalidAnalysisResultError(
@@ -58,7 +61,14 @@ class PromptAnalysisAgent:
             )
 
         for item in result.results:
-            if item.score == 1 or item.quote is None:
+            if item.score == 1:
+                continue
+            definition = self._prompts.criteria_by_code[item.code]
+            if definition.quote_required and not item.quote:
+                raise InvalidAnalysisResultError(
+                    f"Для нарушения {item.code} требуется цитата"
+                )
+            if item.quote is None:
                 continue
             if item.quote not in dialog_text:
                 raise InvalidAnalysisResultError(

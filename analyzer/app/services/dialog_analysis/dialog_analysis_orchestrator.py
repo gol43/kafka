@@ -1,5 +1,5 @@
-import logging
 from collections.abc import Awaitable, Callable
+import logging
 
 from app.agents.external_analyzer_agent import ExternalAnalyzerAgent
 from app.config import Settings
@@ -61,14 +61,15 @@ class DialogAnalysisOrchestrator:
         prompt = prompt_result.payload
         report_payload = build_dialog_report(
             dialog,
-            final_score=float(prompt["score"]),
+            final_score=int(prompt["score"]),
             deviations_count=int(prompt["deviations_count"]),
             hygiene_results=prompt["hygiene_results"],
             deposit_results=prompt["deposit_results"],
             risk_results=prompt["risk_results"],
-            strengths_limit=self._settings.strengths_limit,
-            improvements_limit=self._settings.improvements_limit,
+            strengths_limit=self._settings.dialog_strengths_limit,
+            improvements_limit=self._settings.dialog_improvements_limit,
             positive_templates=self._positive_templates,
+            hidden_metric_codes=self._settings.ui_hidden_metric_codes,
         )
 
         await self._repository.complete_analysis(
@@ -78,9 +79,9 @@ class DialogAnalysisOrchestrator:
             risk_results=prompt["risk_results"],
             audio_results=step_results.get("audio", {}),
             factor_results=step_results.get("factor", {}),
-            general_score=float(prompt["general_score"]),
+            hygiene_score=int(prompt["hygiene_score"]),
             deposit_score=prompt["deposit_score"],
-            score=float(prompt["score"]),
+            score=int(prompt["score"]),
             deposit_topic=bool(prompt["deposit_topic"]),
             critical_violation=prompt_result.critical_violation,
             deviations_count=int(prompt["deviations_count"]),
@@ -101,6 +102,7 @@ class DialogAnalysisOrchestrator:
                     "client_epk": dialog.client_epk,
                     "work_date": str(dialog.work_date),
                     "cleaned_text": dialog.cleaned_text,
+                    "source_payload": dialog.source_payload,
                 }
             )
             return AnalyzerStepResult(analyzer=agent.name, payload=result)

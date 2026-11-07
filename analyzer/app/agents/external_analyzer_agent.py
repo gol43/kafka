@@ -4,8 +4,6 @@ from app.schemas.analyzer_steps import ExternalAnalyzerResponse
 
 
 class ExternalAnalyzerAgent:
-    """Асинхронно вызывает один внешний анализатор по HTTP."""
-
     def __init__(
         self,
         *,
@@ -18,10 +16,9 @@ class ExternalAnalyzerAgent:
         self._client = httpx.AsyncClient(timeout=timeout_seconds)
 
     async def analyze(self, payload: dict) -> dict:
-        """Отправляет нормализованный диалог и ожидает завершённый результат."""
-
+        """Отправляет диалог и ожидает завершённый результат."""
         response = await self._client.post(
-            f"{self._base_url}/internal/v1/analyze",
+            url=f"{self._base_url}/internal/v1/analyze",
             json=payload,
         )
         response.raise_for_status()
@@ -32,5 +29,4 @@ class ExternalAnalyzerAgent:
 
     async def close(self) -> None:
         """Закрывает общий HTTP connection pool."""
-
         await self._client.aclose()

@@ -8,7 +8,7 @@ class AnalyzerStepResult(BaseModel):
 
     analyzer: str
     payload: dict = Field(default_factory=dict)
-    q_score: float | None = None
+    q_score: int | None = None
     critical_violation: bool = False
     criteria: list[dict] = Field(default_factory=list)
 

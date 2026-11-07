@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from app.agents.prompt_analysis_agent import PromptAnalysisAgent
@@ -32,25 +33,16 @@ class PromptDialogAnalyzer:
         self._deposit_enabled = settings.deposit_analysis_enabled
 
     async def analyze(self, dialog: DialogEntity) -> AnalyzerStepResult:
-        """Последовательно выполняет гигиену, вклады и независимые риски."""
+        logger.info("Three prompt analyses started call_id=%s", dialog.call_id)
+        async with asyncio.TaskGroup() as tasks:
+            hygiene_task = tasks.create_task(self._analyze_hygiene(dialog))
+            deposit_task = tasks.create_task(self._analyze_deposit(dialog))
+            risk_task = tasks.create_task(self._analyze_risks(dialog))
 
-        logger.info("Hygiene analysis started call_id=%s", dialog.call_id)
-        hygiene_response = await self._hygiene_agent.analyze(dialog.cleaned_text)
-        logger.info("Hygiene analysis completed call_id=%s", dialog.call_id)
-
-        logger.info("Deposit analysis started call_id=%s", dialog.call_id)
-        deposit_response = (
-            await self._deposit_agent.analyze(dialog.cleaned_text)
-            if self._deposit_enabled
-            else DialogAnalysisResponse(
-                results=[CriterionResult(code="DEPOSIT_TOPIC", score=0)]
-            )
-        )
-        logger.info("Deposit analysis completed call_id=%s", dialog.call_id)
-
-        logger.info("Risk analysis started call_id=%s", dialog.call_id)
-        risk_response = await self._risk_agent.analyze(dialog.cleaned_text)
-        logger.info("Risk analysis completed call_id=%s", dialog.call_id)
+        hygiene_response = hygiene_task.result()
+        deposit_response = deposit_task.result()
+        risk_response = risk_task.result()
+        logger.info("Three prompt analyses completed call_id=%s", dialog.call_id)
 
         score = calculate_dialog_score(
             hygiene_response.results,
@@ -59,25 +51,27 @@ class PromptDialogAnalyzer:
             self._critical_score_cap,
         )
 
-        hygiene_results = [
-            self._enrich(item, included=True)
-            for item in hygiene_response.results
-        ]
-        deposit_results = [
-            self._enrich(
+        hygiene_results = []
+        for item in hygiene_response.results:
+            hygiene_results.append(self._enrich(item, included=True))
+
+        deposit_results = []
+        for item in deposit_response.results:
+            deposit_results.append(self._enrich(
                 item.model_copy(
                     update={"score": item.score if score.deposit_topic else 0}
                 ),
                 included=score.deposit_topic,
-            )
-            for item in deposit_response.results
-        ]
-        risk_results = [
-            self._enrich(item, included=True)
-            for item in risk_response.results
-        ]
+            ))
 
-        risks_count = sum(item["score"] == 0 for item in risk_results)
+        risk_results = []
+        for item in risk_response.results:
+            risk_results.append(self._enrich(item, included=True))
+
+        risks_count = 0
+        for item in risk_results:
+            if item["score"] == 0:
+                risks_count += 1
         criteria = hygiene_results + deposit_results
 
         return AnalyzerStepResult(
@@ -86,7 +80,7 @@ class PromptDialogAnalyzer:
                 "hygiene_results": hygiene_results,
                 "deposit_results": deposit_results,
                 "risk_results": risk_results,
-                "general_score": score.general_score,
+                "hygiene_score": score.hygiene_score,
                 "deposit_topic": score.deposit_topic,
                 "deposit_score": score.deposit_score,
                 "score": score.final_score,
@@ -98,24 +92,42 @@ class PromptDialogAnalyzer:
             criteria=criteria,
         )
 
+    async def _analyze_hygiene(self, dialog: DialogEntity) -> DialogAnalysisResponse:
+        logger.info("Hygiene request started call_id=%s", dialog.call_id)
+        result = await self._hygiene_agent.analyze(dialog.cleaned_text)
+        logger.info("Hygiene request completed call_id=%s", dialog.call_id)
+        return result
+
+    async def _analyze_deposit(self, dialog: DialogEntity) -> DialogAnalysisResponse:
+        logger.info("Deposit request started call_id=%s", dialog.call_id)
+        if not self._deposit_enabled:
+            return DialogAnalysisResponse(
+                results=[CriterionResult(code="DEPOSIT_TOPIC", score=0)]
+            )
+        result = await self._deposit_agent.analyze(dialog.cleaned_text)
+        logger.info("Deposit request completed call_id=%s", dialog.call_id)
+        return result
+
+    async def _analyze_risks(self, dialog: DialogEntity) -> DialogAnalysisResponse:
+        logger.info("Risk request started call_id=%s", dialog.call_id)
+        result = await self._risk_agent.analyze(dialog.cleaned_text)
+        logger.info("Risk request completed call_id=%s", dialog.call_id)
+        return result
+
     def _enrich(self, result: CriterionResult, *, included: bool) -> dict:
         definition = self._prompts.criteria_by_code[result.code]
         severity = definition.severity
-        if severity == "minor" and definition.critical:
-            severity = "critical"
-        elif severity == "minor" and definition.penalty >= 5:
-            severity = "significant"
-
         return {
             "code": result.code,
-            "title": definition.title,
+            "title": definition.title_positive,
+            "title_positive": definition.title_positive,
+            "title_negative": definition.title_negative,
             "block": definition.block,
             "score": result.score,
             "quote": result.quote,
             "severity": severity,
             "penalty": definition.penalty,
-            "critical": definition.critical,
             "quote_required": definition.quote_required,
             "recommendation": definition.recommendation or definition.output_rule,
-            "included_in_analytics": included and not definition.topic_gate,
+            "included_in_analytics": included and definition.code != "DEPOSIT_TOPIC",
         }

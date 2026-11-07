@@ -4,7 +4,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.database.connection import session_scope
-from app.database.models import Dialog, DialogReport
+from app.database.models import AnalysisTask, Dialog, DialogReport
+from app.exceptions import AnalysisDeadlineExceededError
 from app.schemas.dialogs import CleanedDialog
 from app.schemas.entities import DialogEntity
 
@@ -26,15 +27,9 @@ class DialogRepository:
         prompt_version: str,
     ) -> bool:
         """Сохраняет только диалоги, которых ещё нет среди готовых отчётов."""
-
         received_at = datetime.now(UTC)
         occurred_at = payload.occurred_at or received_at
         duration_seconds = payload.duration_seconds
-        if duration_seconds is None:
-            duration_seconds = max(
-                (item.end_ms for item in payload.utterances),
-                default=0,
-            ) // 1000
 
         async with session_scope() as session:
             completed_exists = await session.scalar(
@@ -49,11 +44,16 @@ class DialogRepository:
                     call_id=payload.call_id,
                     manager_id=payload.manager_id,
                     client_epk=payload.client_epk,
+                    client_fio=payload.client_fio or "",
                     work_date=work_date,
                     occurred_at=occurred_at,
                     received_at=received_at,
                     duration_seconds=duration_seconds,
                     cleaned_text=payload.cleaned_text,
+                    source_payload=payload.model_dump(
+                        mode="json",
+                        exclude={"cleaned_text"},
+                    ),
                     required_analyzers=list(required_analyzers),
                     status="waiting",
                     criteria_version=criteria_version,
@@ -64,7 +64,20 @@ class DialogRepository:
                 .on_conflict_do_nothing(index_elements=["call_id"])
                 .returning(Dialog.call_id)
             )
-            return result.scalar_one_or_none() is not None
+            saved_call_id = result.scalar_one_or_none()
+            if saved_call_id is None:
+                return False
+
+            await session.execute(
+                insert(AnalysisTask)
+                .values(
+                    call_id=saved_call_id,
+                    status="waiting",
+                    expires_at=received_at + self._ttl,
+                )
+                .on_conflict_do_nothing(index_elements=["call_id"])
+            )
+            return True
 
     async def get(self, call_id: str) -> DialogEntity | None:
         async with session_scope() as session:
@@ -80,9 +93,9 @@ class DialogRepository:
         risk_results: list[dict],
         audio_results: dict,
         factor_results: dict,
-        general_score: float,
-        deposit_score: float | None,
-        score: float,
+        hygiene_score: int,
+        deposit_score: int | None,
+        score: int,
         deposit_topic: bool,
         critical_violation: bool,
         deviations_count: int,
@@ -90,26 +103,31 @@ class DialogRepository:
         report_payload: dict,
     ) -> None:
         """Сохраняет отчёт и удаляет входной диалог вместе с completed task."""
-
         completed_at = datetime.now(UTC)
         async with session_scope() as session:
             dialog = await session.get(Dialog, call_id, with_for_update=True)
             if dialog is None:
                 raise ValueError("Входящий диалог не найден")
+            if dialog.status != "processing":
+                raise AnalysisDeadlineExceededError(
+                    "Диалог уже закрыт без анализа после cutoff"
+                )
 
             statement = insert(DialogReport).values(
                 call_id=dialog.call_id,
                 manager_id=dialog.manager_id,
                 client_epk=dialog.client_epk,
+                client_fio=dialog.client_fio,
                 work_date=dialog.work_date,
                 occurred_at=dialog.occurred_at,
                 cleaned_text=dialog.cleaned_text,
+                source_payload=dialog.source_payload,
                 hygiene_results=hygiene_results,
                 deposit_results=deposit_results,
                 risk_results=risk_results,
                 audio_results=audio_results,
                 factor_results=factor_results,
-                general_score=general_score,
+                hygiene_score=hygiene_score,
                 deposit_score=deposit_score,
                 score=score,
                 deposit_topic=deposit_topic,
@@ -128,11 +146,13 @@ class DialogRepository:
                     index_elements=[DialogReport.call_id],
                     set_={
                         "hygiene_results": statement.excluded.hygiene_results,
+                        "client_fio": statement.excluded.client_fio,
                         "deposit_results": statement.excluded.deposit_results,
                         "risk_results": statement.excluded.risk_results,
+                        "source_payload": statement.excluded.source_payload,
                         "audio_results": statement.excluded.audio_results,
                         "factor_results": statement.excluded.factor_results,
-                        "general_score": statement.excluded.general_score,
+                        "hygiene_score": statement.excluded.hygiene_score,
                         "deposit_score": statement.excluded.deposit_score,
                         "score": statement.excluded.score,
                         "deposit_topic": statement.excluded.deposit_topic,
@@ -150,7 +170,7 @@ class DialogRepository:
     async def mark_failed(self, call_id: str, error_code: str) -> None:
         async with session_scope() as session:
             dialog = await session.get(Dialog, call_id, with_for_update=True)
-            if dialog:
+            if dialog and dialog.status == "processing":
                 dialog.status = "failed"
                 dialog.error_code = error_code
 

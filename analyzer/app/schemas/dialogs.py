@@ -47,14 +47,12 @@ class Participant(BaseModel):
 
 class CleanedDialog(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
-    contract_version: str = "1.0"
-    cleaner_version: str
-    call_id: str
+    call_id: str = Field(min_length=1, max_length=64)
     manager_id: str
     manager_name: str = Field(min_length=1)
-    client_epk: str = Field(min_length=1)
-    client_fio: str | None = None
-    duration_seconds: int | None = Field(default=None, ge=0)
+    client_epk: str = Field(min_length=1, max_length=128)
+    client_fio: str | None = Field(default=None, min_length=1, max_length=256)
+    duration_seconds: int = Field(ge=0)
     occurred_at: datetime | None = None
     channel: str | None = None
     participants: list[Participant]

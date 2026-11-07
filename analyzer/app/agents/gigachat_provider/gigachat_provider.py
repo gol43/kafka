@@ -1,39 +1,67 @@
 import asyncio
-import json
-import time
-import uuid
+import logging
 from collections.abc import Awaitable, Callable
-from typing import TypeVar
+from functools import lru_cache
+from typing import TypeVar, cast
 
-import httpx
-from pydantic import BaseModel, ValidationError
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_gigachat.chat_models import GigaChat
+from pydantic import BaseModel
 
 from app.agents.gigachat_provider.base import BaseGigaChatProvider, ResponseModel
-from app.agents.gigachat_provider.exceptions import GigaChatError
+from app.agents.gigachat_provider.exceptions import (
+    GigaChatError,
+    map_gigachat_error,
+)
 from app.config import Settings
 from app.metrics import GIGACHAT_ACTIVE, GIGACHAT_REQUESTS
 
-Result = TypeVar("Result")
+logger = logging.getLogger(__name__)
 
+Struct = TypeVar("Struct", bound=BaseModel)
 
 class GigaChatProvider(BaseGigaChatProvider):
-    """Асинхронный REST-клиент GigaChat с общим ограничением конкурентности."""
+    """Провайдер GigaChat на основе langchain-gigachat с мутуальной TLS и structured output."""
 
     def __init__(self, settings: Settings) -> None:
-        self._settings = settings
+        """Инициализация провайдера.
+
+        :param settings: настройки Analyzer (ENV-переменные).
+        """
+        self._base_url = settings.gigachat_base_url
+        self._retry_limit = settings.gigachat_max_attempts
+        self._retry_delay = settings.gigachat_retry_base_seconds
+        self._request_timeout = settings.gigachat_timeout_seconds
+        self._model = settings.gigachat_model
+        self._scope = settings.gigachat_scope
+        self._temperature = settings.gigachat_temperature
+        self._verify_ssl = settings.gigachat_verify_ssl
+        self._cert_file = settings.gigachat_cert_file
+        self._key_file = settings.gigachat_key_file
+
         self._semaphore = asyncio.Semaphore(settings.gigachat_max_concurrency)
-        self._client = httpx.AsyncClient(
-            timeout=settings.gigachat_timeout_seconds,
-            verify=settings.gigachat_verify_ssl,
-            cert=self._client_certificate(),
-        )
 
-        self._access_token_value: str | None = None
-        self._access_token_expires_at = 0.0
-        self._access_token_lock = asyncio.Lock()
+    @lru_cache(maxsize=10)
+    def get_client(self, model: str | None = None) -> GigaChat:
+        """Кэширует клиент по модели - нет нового создания на каждый запрос.
 
-    async def close(self) -> None:
-        await self._client.aclose()
+        Сертификаты, base_url и verify_ssl_certs передаются явно.
+        GIGACHAT_CREDENTIALS и GIGACHAT_SCOPE читаются из ENV автоматически.
+        """
+        kwargs: dict = {
+            "model": model or self._model,
+            "scope": self._scope,
+            "temperature": self._temperature,
+            "timeout": self._request_timeout,
+            "verify_ssl_certs": self._verify_ssl,
+            "base_url": self._base_url,
+        }
+        if self._cert_file:
+            kwargs["cert_file"] = self._cert_file
+        if self._key_file:
+            kwargs["key_file"] = self._key_file
+
+        return GigaChat(**kwargs)
 
     async def chat_structured(
         self,
@@ -42,159 +70,64 @@ class GigaChatProvider(BaseGigaChatProvider):
         user_prompt: str,
         response_model: type[ResponseModel],
     ) -> ResponseModel:
+        """Вызов LLM со строгой схемой ответа."""
+
         async def operation() -> ResponseModel:
-            payload = self._completion_payload(
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                response_model=response_model,
+            messages: list[BaseMessage] = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt),
+            ]
+            gc_model = self.get_client()
+            gc_model_structured = gc_model.with_structured_output(
+                schema=response_model,
+                method="json_schema",
+                strict=True,
             )
-            data = await self._post_once("/chat/completions", payload)
-            content = data["choices"][0]["message"]["content"]
-            return response_model.model_validate_json(content)
+            result = cast(
+                ResponseModel,
+                await gc_model_structured.ainvoke(messages),
+            )
+            if result is None:
+                raise ValueError("GigaChat returned None")
+            return result
 
-        return await self._with_attempts(operation)
+        return await self._with_retry(operation)
 
-    async def count_tokens(self, values: list[str]) -> int:
-        async def operation() -> int:
-            payload = {
-                "model": self._settings.gigachat_model,
-                "input": values,
-            }
-            data = await self._post_once("/tokens/count", payload)
-            return sum(int(item.get("tokens", 0)) for item in data)
+    async def close(self) -> None:
+        self.get_client.cache_clear()
 
-        return await self._with_attempts(operation)
-
-    def _completion_payload(
+    async def _with_retry(
         self,
-        *,
-        system_prompt: str,
-        user_prompt: str,
-        response_model: type[BaseModel],
-    ) -> dict:
-        payload: dict = {
-            "model": self._settings.gigachat_model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            "stream": False,
-            "max_tokens": self._settings.gigachat_max_output_tokens,
-            "repetition_penalty": self._settings.gigachat_repetition_penalty,
-            "response_format": {
-                "type": "json_schema",
-                "schema": response_model.model_json_schema(),
-                "strict": True,
-            },
-        }
-
-        if self._settings.gigachat_temperature is not None:
-            payload["temperature"] = self._settings.gigachat_temperature
-        if self._settings.gigachat_top_p is not None:
-            payload["top_p"] = self._settings.gigachat_top_p
-
-        return payload
-
-    async def _post_once(self, path: str, payload: dict) -> dict:
-        operation = path.strip("/").replace("/", "_")
-
-        async with self._semaphore:
-            GIGACHAT_ACTIVE.inc()
-            try:
-                token = await self._access_token()
-                response = await self._client.post(
-                    f"{self._settings.gigachat_base_url.rstrip('/')}{path}",
-                    headers={"Authorization": f"Bearer {token}"},
-                    json=payload,
-                )
-                if response.status_code == 401:
-                    self._access_token_value = None
-                response.raise_for_status()
-
-                GIGACHAT_REQUESTS.labels(
-                    operation=operation,
-                    outcome="success",
-                ).inc()
-                return response.json()
-            except Exception:
-                GIGACHAT_REQUESTS.labels(
-                    operation=operation,
-                    outcome="error",
-                ).inc()
-                raise
-            finally:
-                GIGACHAT_ACTIVE.dec()
-
-    async def _access_token(self) -> str:
-        if self._token_is_valid():
-            return self._access_token_value  # type: ignore[return-value]
-
-        async with self._access_token_lock:
-            if self._token_is_valid():
-                return self._access_token_value  # type: ignore[return-value]
-
-            response = await self._client.post(
-                self._settings.gigachat_auth_url,
-                headers={
-                    "Authorization": f"Basic {self._settings.gigachat_credentials}",
-                    "RqUID": str(uuid.uuid4()),
-                },
-                data={"scope": self._settings.gigachat_scope},
-            )
-            response.raise_for_status()
-            data = response.json()
-
-            self._access_token_value = data["access_token"]
-            expires_at = float(data["expires_at"])
-            self._access_token_expires_at = (
-                expires_at / 1000 if expires_at > 10_000_000_000 else expires_at
-            )
-            return self._access_token_value
-
-    def _token_is_valid(self) -> bool:
-        return bool(
-            self._access_token_value
-            and time.time() < self._access_token_expires_at - 30
-        )
-
-    async def _with_attempts(
-        self,
-        operation: Callable[[], Awaitable[Result]],
-    ) -> Result:
+        operation: Callable[[], Awaitable[Struct]],
+    ) -> Struct:
+        """Повторные попытки через tenacity (из BaseConnector)."""
         last_error: Exception | None = None
 
-        for attempt in range(1, self._settings.gigachat_max_attempts + 1):
+        for attempt in range(1, self._retry_limit + 1):
             try:
-                return await operation()
-            except (
-                httpx.HTTPError,
-                KeyError,
-                ValueError,
-                ValidationError,
-                json.JSONDecodeError,
-            ) as exc:
+                async with self._semaphore:
+                    GIGACHAT_ACTIVE.inc()
+                    try:
+                        result = await operation()
+                        GIGACHAT_REQUESTS.labels(outcome="completed").inc()
+                        return result
+                    finally:
+                        GIGACHAT_ACTIVE.dec()
+
+            except GigaChatError as exc:
                 last_error = exc
-                if attempt >= self._settings.gigachat_max_attempts:
+                if attempt >= self._retry_limit:
                     break
+                await asyncio.sleep(self._retry_delay)
+            except Exception as exc:
+                mapped = map_gigachat_error(exc)
+                last_error = mapped
+                if attempt >= self._retry_limit:
+                    break
+                await asyncio.sleep(self._retry_delay)
 
-                delay = min(
-                    self._settings.gigachat_retry_base_seconds * 2 ** (attempt - 1),
-                    20,
-                )
-                await asyncio.sleep(delay)
-
+        GIGACHAT_REQUESTS.labels(outcome="failed").inc()
         raise GigaChatError(
-            "GigaChat request failed after all attempts",
-            attempts=self._settings.gigachat_max_attempts,
+            message="GigaChat request failed after all attempts",
+            attempts=self._retry_limit,
         ) from last_error
-
-    def _client_certificate(self) -> tuple[str, str] | None:
-        cert_file = self._settings.gigachat_cert_file
-        key_file = self._settings.gigachat_key_file
-        if not cert_file and not key_file:
-            return None
-        if not cert_file or not key_file:
-            raise ValueError(
-                "GIGACHAT_CERT_FILE and GIGACHAT_KEY_FILE must be configured together"
-            )
-        return cert_file, key_file

@@ -1,0 +1,16 @@
+code: HYG_26
+block: hygiene
+title_positive: Снижение тревоги клиента
+title_negative: Тревога клиента не снижена
+description: Клиент в финале проговаривает страхи и неопределенность.
+rules: Финал звонка.
+trigger: В конце есть «боюсь», «переживаю», высокая неопределенность.
+positive_definition: Клиент уходит с понятным планом и сниженной тревогой.
+negative_definition: В конце есть «боюсь», «переживаю», высокая неопределенность.
+good_examples: []
+bad_examples: []
+output_rule: В конце есть «боюсь», «переживаю», высокая неопределенность.
+severity: critical
+penalty: 12
+quote_required: true
+recommendation: 'В конце убирайте неопределенность: кто, что и когда делает дальше.'

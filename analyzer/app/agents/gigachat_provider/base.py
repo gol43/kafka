@@ -18,9 +18,5 @@ class BaseGigaChatProvider(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def count_tokens(self, values: list[str]) -> int:
-        raise NotImplementedError
-
-    @abstractmethod
     async def close(self) -> None:
         raise NotImplementedError

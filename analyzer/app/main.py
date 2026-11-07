@@ -1,6 +1,6 @@
 import asyncio
-import logging
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI
 from prometheus_client import make_asgi_app
@@ -14,10 +14,11 @@ from app.api.health import router as health_router
 from app.api.manager import router as manager_router
 from app.api.runs import router as runs_router
 from app.config import get_settings
+from app.database.connection import initialize_database
 from app.database.repositories.analysis_task_repository import AnalysisTaskRepository
-from app.database.repositories.dialog_repository import DialogRepository
 from app.database.repositories.dashboard_repository import DashboardRepository
 from app.database.repositories.dialog_report_repository import DialogReportRepository
+from app.database.repositories.dialog_repository import DialogRepository
 from app.services.dashboard.dashboard_builder import DashboardBuilder
 from app.services.dashboard.dashboard_scheduler import DashboardScheduler
 from app.services.dashboard.manager_service import ManagerService
@@ -38,18 +39,19 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.settings = settings
+    await initialize_database()
     prompt_loader = PromptLoader(active_criteria_codes=settings.active_criteria_codes)
     provider = create_llm_provider(settings)
 
     dialog_repository = DialogRepository(settings.data_ttl_days)
-    task_repository = AnalysisTaskRepository(settings.data_ttl_days)
+    task_repository = AnalysisTaskRepository()
     dialog_report_repository = DialogReportRepository()
     dashboard_repository = DashboardRepository(settings.data_ttl_days)
 
     hygiene_agent = PromptAnalysisAgent(
         prompt_loader,
         provider,
-        block="general",
+        block="hygiene",
         log_responses=settings.log_llm_responses,
     )
     deposit_agent = PromptAnalysisAgent(
@@ -64,6 +66,7 @@ async def lifespan(app: FastAPI):
         block="risk",
         log_responses=settings.log_llm_responses,
     )
+
     prompt_dialog_analyzer = PromptDialogAnalyzer(
         prompt_loader=prompt_loader,
         hygiene_agent=hygiene_agent,
@@ -71,6 +74,7 @@ async def lifespan(app: FastAPI):
         risk_agent=risk_agent,
         settings=settings,
     )
+
     external_analyzers = {}
     if settings.audio_analyzer_url:
         external_analyzers["audio"] = ExternalAnalyzerAgent(
@@ -92,20 +96,24 @@ async def lifespan(app: FastAPI):
         settings=settings,
         positive_templates=prompt_loader.positive_templates,
     )
+
     worker = AnalysisWorker(
         settings=settings,
         tasks=task_repository,
         dialogs=dialog_repository,
         dialog_orchestrator=dialog_orchestrator,
     )
+
     dashboard_builder = DashboardBuilder(
         settings,
         dashboard_repository,
         dialog_report_repository,
     )
+
     scheduler = DashboardScheduler(
         settings,
         dashboard_builder,
+        dashboard_repository,
         dialog_repository,
         task_repository,
     )
@@ -115,7 +123,6 @@ async def lifespan(app: FastAPI):
     app.state.dialog_intake = DialogIntakeService(
         settings,
         dialog_repository,
-        worker,
     )
     app.state.manager_service = ManagerService(
         dashboard_repository,
@@ -126,6 +133,7 @@ async def lifespan(app: FastAPI):
             settings,
             prompt_loader,
             dialog_report_repository,
+            dashboard_repository,
             dashboard_builder,
         )
         if settings.test_data_api_enabled
@@ -142,16 +150,16 @@ async def lifespan(app: FastAPI):
         await worker.stop()
         worker_task.cancel()
         await asyncio.gather(worker_task, return_exceptions=True)
-        await asyncio.gather(
-            *(agent.close() for agent in external_analyzers.values()),
-            return_exceptions=True,
-        )
+        close_operations = []
+        for agent in external_analyzers.values():
+            close_operations.append(agent.close())
+        await asyncio.gather(*close_operations, return_exceptions=True)
         await provider.close()
 
 
-app = FastAPI(title="Communication Quality Analyzer", lifespan=lifespan)
-app.include_router(callback_router)
-app.include_router(manager_router)
-app.include_router(runs_router)
-app.include_router(health_router)
-app.mount("/metrics", make_asgi_app())
+app = FastAPI(title="AI-Q-SCORE", lifespan=lifespan)
+app.include_router(callback_router, prefix=settings.app_api_prefix)
+app.include_router(manager_router, prefix=settings.app_api_prefix)
+app.include_router(runs_router, prefix=settings.app_api_prefix)
+app.include_router(health_router, prefix=settings.app_api_prefix)
+app.mount(settings.prometheus_path, make_asgi_app())

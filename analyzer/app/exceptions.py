@@ -10,5 +10,7 @@ class InvalidAnalysisResultError(AnalyzerError):
     """Анализатор вернул данные, нарушающие доменный контракт."""
 
 
-class TokenBudgetExceededError(AnalyzerError):
-    """Один неделимый источник не помещается в лимит токенов."""
+class AnalysisDeadlineExceededError(AnalyzerError):
+    """Анализ завершился после закрытия рабочего дня."""
+
+

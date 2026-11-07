@@ -1,11 +1,9 @@
-from fastapi import APIRouter, HTTPException, Request, status
-
-from datetime import UTC, date, datetime
+from datetime import date
 from typing import Annotated
 
-from fastapi import Query
+from fastapi import APIRouter, HTTPException, Query, Request, status
 
-from app.schemas.api import AcceptedResponse, DialogRunRequest
+from app.schemas.api import AcceptedResponse, DashboardTestDataRequest, DialogRunRequest
 
 router = APIRouter(
     prefix="/analysis/run",
@@ -14,7 +12,7 @@ router = APIRouter(
 
 
 @router.post(
-    "/dialog",
+    path="/dialog",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=AcceptedResponse,
 )
@@ -40,17 +38,14 @@ async def rebuild_dashboard(
 @router.post("/dashboard-test-data")
 async def create_dashboard_test_data(
     request: Request,
-    end_date: Annotated[date | None, Query(alias="date")] = None,
-    days: Annotated[int | None, Query(ge=5, le=183)] = None,
+    payload: DashboardTestDataRequest,
 ) -> dict:
     """Создаёт историю двух менеджеров и строит её production builder-ом."""
-
     service = request.app.state.dashboard_test_data
     if service is None:
         raise HTTPException(status_code=404, detail="Test data API is disabled")
 
-    settings = request.app.state.settings
-    return await service.create(
-        end_date=end_date or datetime.now(UTC).date(),
-        days=days or settings.test_data_default_days,
-    )
+    try:
+        return await service.create(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

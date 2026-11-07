@@ -1,16 +1,21 @@
 from prometheus_client import Counter, Gauge
 
 ANALYZER_CALLBACKS = Counter(
-    "quality_analyzer_callbacks_total", "Cleaner callbacks", ["outcome"]
+    "analyzer_callbacks_total",
+    "Dialog callbacks received by outcome",
+    ["outcome"],
 )
 ANALYZER_JOBS = Counter(
-    "quality_analyzer_jobs_total", "Finished analyzer jobs", ["job_type", "outcome"]
-)
-GIGACHAT_REQUESTS = Counter(
-    "quality_gigachat_requests_total",
-    "GigaChat HTTP requests",
-    ["operation", "outcome"],
+    "analyzer_jobs_total",
+    "Dialog analysis jobs by outcome",
+    ["job_type", "outcome"],
 )
 GIGACHAT_ACTIVE = Gauge(
-    "quality_gigachat_active_requests", "Active GigaChat HTTP requests"
+    "gigachat_active_requests",
+    "GigaChat requests currently holding the shared semaphore",
+)
+GIGACHAT_REQUESTS = Counter(
+    "gigachat_requests_total",
+    "GigaChat requests by outcome",
+    ["outcome"],
 )

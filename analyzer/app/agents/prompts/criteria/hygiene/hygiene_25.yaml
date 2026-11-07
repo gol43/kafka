@@ -1,0 +1,16 @@
+code: HYG_25
+block: hygiene
+title_positive: Доверие в финале разговора
+title_negative: Клиент завершил разговор с недоверием
+description: Клиент заканчивает разговор с сомнениями в компетентности/честности.
+rules: Финал звонка.
+trigger: Клиент проговаривает недоверие или скепсис.
+positive_definition: Клиент подтверждает, что понял логику и готов к следующему шагу.
+negative_definition: Клиент проговаривает недоверие или скепсис.
+good_examples: []
+bad_examples: []
+output_rule: Клиент проговаривает недоверие или скепсис.
+severity: critical
+penalty: 12
+quote_required: true
+recommendation: Укрепляйте доверие через прозрачные объяснения, конкретные сроки и проверяемые обещания.

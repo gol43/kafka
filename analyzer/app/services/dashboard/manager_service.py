@@ -22,64 +22,79 @@ class ManagerService:
     async def dashboard_block(
         self,
         manager_id: str,
-        report_date: date,
         name: str,
     ):
-        snapshot = await self._snapshot(manager_id, report_date)
-        return getattr(snapshot, name)
+        _, payload = await self._latest_value(manager_id, name)
+        return _without_nulls(payload)
 
-    async def client_risk(
+    async def certain_client_risk(
         self,
         manager_id: str,
-        report_date: date,
         client_epk: str,
     ) -> dict:
-        snapshot = await self._snapshot(manager_id, report_date)
-        payload = snapshot.client_risk_details.get(client_epk)
+        _, client_risks = await self._latest_value(
+            manager_id,
+            "certain_client_risks",
+        )
+        payload = client_risks.get(client_epk)
         if payload is None:
             raise EntityNotFoundError("Риск клиента не найден")
-        return payload
+        return _without_nulls(payload)
 
-    async def improvement(
+    async def certain_improvement_metric(
         self,
         manager_id: str,
-        report_date: date,
         metric_code: str,
     ) -> dict:
-        snapshot = await self._snapshot(manager_id, report_date)
-        payload = snapshot.improvement_details.get(metric_code)
+        _, metric_details = await self._latest_value(
+            manager_id,
+            "certain_improvement_metrics",
+        )
+        payload = metric_details.get(metric_code)
         if payload is None:
             raise EntityNotFoundError("Детализация метрики не найдена")
-        return payload
+        return _without_nulls(payload)
 
     async def dialogs(
         self,
         *,
         manager_id: str,
-        report_date: date,
-        limit: int,
-        client_epk: str | None,
-        date_from: date | None,
-        date_to: date | None,
-    ) -> list[dict]:
-        rows = await self._reports.list_for_manager(
+        score: str | None = None,
+        client_epk: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        offset: int = 0,
+        limit: int = 5,
+    ) -> dict:
+        report_date = await self._dashboards.latest_report_date(manager_id)
+        if report_date is None:
+            raise EntityNotFoundError("Витрина менеджера не сформирована")
+
+        rows = await self._reports.list_completed_dialogs(
             manager_id=manager_id,
-            report_date=report_date,
-            limit=limit,
+            work_date=report_date,
+            score=score,
             client_epk=client_epk,
             date_from=date_from,
             date_to=date_to,
+            offset=offset,
+            limit=limit,
         )
-        return [
-            {
-                "callId": row.call_id,
+
+        has_more = len(rows) > limit
+        if has_more:
+            rows = rows[:-1]
+
+        items = []
+        for row in rows:
+            items.append({
+                "callId": row["call_id"],
                 "type": "call",
-                "clientEpk": row.client_epk,
-                "occurredAt": row.occurred_at.isoformat(),
-                "score": row.score,
-            }
-            for row in rows
-        ]
+                "clientEpk": row["client_epk"],
+                "occurredAt": row["occurred_at"].isoformat(),
+                "score": row["score"],
+            })
+        return _without_nulls({"items": items, "hasMore": has_more})
 
     async def dialog_report(self, call_id: str) -> dict:
         logger.info("Dialog GET received call_id=%s", call_id)
@@ -87,15 +102,33 @@ class ManagerService:
         if report is None:
             raise EntityNotFoundError("Отчёт не найден")
         logger.info("Dialog GET returned call_id=%s score=%s", call_id, report.score)
-        return report.report_payload
 
-    async def _snapshot(self, manager_id: str, report_date: date):
+        if report.report_payload:
+            return _without_nulls(report.report_payload)
+        raise EntityNotFoundError("Готовый payload отчёта не сформирован")
+
+    async def _latest_value(self, manager_id: str, name: str):
         logger.info(
-            "Dashboard GET manager_id=%s date=%s",
+            "Dashboard GET manager_id=%s",
             manager_id,
-            report_date,
         )
-        snapshot = await self._dashboards.snapshot(manager_id, report_date)
-        if snapshot is None:
+        value = await self._dashboards.latest_snapshot_value(manager_id, name)
+        if value is None:
             raise EntityNotFoundError("Витрина менеджера за дату не сформирована")
-        return snapshot
+        return value
+
+
+def _without_nulls(value):
+    if value is None:
+        return ""
+    if isinstance(value, dict):
+        result = {}
+        for key, item in value.items():
+            result[key] = _without_nulls(item)
+        return result
+    if isinstance(value, list):
+        result = []
+        for item in value:
+            result.append(_without_nulls(item))
+        return result
+    return value
