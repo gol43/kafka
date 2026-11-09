@@ -33,7 +33,6 @@ POST /api/v1.0/ai-q-score/internal/v1/dialogs/cleaned
 | `duration_seconds` | Обязательная длительность звонка в секундах |
 | `occurred_at` | Дата и время звонка |
 | `cleaned_text` | Очищенный текст с понятными ролями сотрудника и клиента |
-| `participants` | Участники коммуникации |
 | `utterances` | Реплики с ролями и временными границами |
 | `source_metadata` | Дополнительные данные источника |
 

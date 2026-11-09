@@ -21,20 +21,15 @@ class CriterionDefinition(BaseModel):
     output_rule: str = Field(min_length=1)
     penalty: int
     block: Literal["hygiene", "deposit", "risk"] = "hygiene"
-    severity: Literal[
-        "critical",
-        "significant",
-        "minor",
-        "info",
-        "high",
-        "medium",
-        "low",
-    ] = "minor"
+    severity: Literal["critical", "significant", "minor"] = "minor"
+    risk_level: Literal["high", "medium", "low"] | None = None
     quote_required: bool = True
     recommendation: str = Field(min_length=1)
 
     @model_validator(mode='after')
     def validate_risk_severity(self):
-        if self.block == 'risk' and self.severity not in {'high', 'medium', 'low'}:
-            raise ValueError("risk can be only - high, medium or low")
+        if self.block == "risk" and self.risk_level is None:
+            raise ValueError("risk criterion requires risk_level")
+        if self.block != "risk" and self.risk_level is not None:
+            raise ValueError("risk_level is allowed only for risk criteria")
         return self

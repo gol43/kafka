@@ -38,13 +38,6 @@ class Utterance(BaseModel):
     word_alignments: list[WordAlignment] = Field(default_factory=list)
 
 
-class Participant(BaseModel):
-    role: Literal["employee", "client", "unknown"]
-    name: str | None = None
-    phone_number: str | None = None
-    employee_id: str | None = None
-
-
 class CleanedDialog(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
     call_id: str = Field(min_length=1, max_length=64)
@@ -55,7 +48,6 @@ class CleanedDialog(BaseModel):
     duration_seconds: int = Field(ge=0)
     occurred_at: datetime | None = None
     channel: str | None = None
-    participants: list[Participant]
     cleaned_text: str = Field(min_length=1)
     utterances: list[Utterance]
     source_metadata: dict = Field(default_factory=dict)

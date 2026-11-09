@@ -110,7 +110,7 @@ class PromptDialogAnalyzer:
 
     def _enrich(self, result: CriterionResult, *, included: bool) -> dict:
         definition = self._prompts.criteria_by_code[result.code]
-        severity = definition.severity
+        severity = definition.risk_level or definition.severity
         return {
             "code": result.code,
             "title": definition.title_positive,

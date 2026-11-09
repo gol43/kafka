@@ -17,7 +17,6 @@ Content-Type: application/json
 | `manager_id` | string | Ровно восемь цифр |
 | `client_epk` | string | Идентификатор клиента, 1–128 символов |
 | `duration_seconds` | integer | Длительность звонка, `>= 0` |
-| `participants` | array | Участники звонка |
 | `cleaned_text` | string | Непустой очищенный текст с ролями |
 | `utterances` | array | Структурированные реплики |
 
@@ -34,19 +33,6 @@ Content-Type: application/json
 Дата и время должны передаваться в ISO 8601 с часовым поясом, предпочтительно UTC: `2026-11-07T12:30:00Z`.
 
 Data Cleaner передаёт `client_fio_encrypted:true`, когда ФИО зашифровано. `ENCRYPT_CLIENT_FIO_AT_REST=true` заставляет Analyzer хранить ФИО зашифрованным во всех своих таблицах и JSONB; при `false` оно хранится открытым. Analyzer приводит входящее ФИО к выбранному режиму, сохраняя флаг состояния. GET расшифровывает его только при ответе. Ключ `CLIENT_FIO_ENCRYPTION_KEY` должен совпадать с `ENCRYPTION_KEY` Data Cleaner. При необходимости преобразования без ключа или при неверном токене callback получает 422.
-
-## Participant
-
-```json
-{
-  "role": "employee",
-  "name": "Иван Иванов",
-  "phone_number": "+79990000000",
-  "employee_id": "00000001"
-}
-```
-
-`role`: `employee`, `client` или `unknown`. Остальные поля необязательны.
 
 ## Utterance
 
@@ -95,10 +81,6 @@ curl -X POST "http://localhost:8082/api/v1.0/ai-q-score/internal/v1/dialogs/clea
     "duration_seconds": 90,
     "occurred_at": "2026-11-07T12:30:00Z",
     "channel": "phone",
-    "participants": [
-      {"role": "employee", "name": "Иван Иванов", "employee_id": "00000001"},
-      {"role": "client", "name": "Петров Пётр Петрович"}
-    ],
     "cleaned_text": "Сотрудник: Добрый день, меня зовут Иван. Клиент: Добрый день.",
     "utterances": [
       {

@@ -49,7 +49,6 @@ Data Cleaner → POST /internal/v1/dialogs/cleaned → dialogs + analysis_tasks
 | `duration_seconds` | целое ≥0, да | Основание отсечения коротких звонков |
 | `occurred_at` | дата-время ISO 8601, нет | Время разговора для отображения и сортировки; календарная маршрутизация при включённом фильтре опирается на **время поступления** |
 | `channel` | строка, нет | Канал источника; пользовательский тип в GET сейчас всегда `call` |
-| `participants` | массив, да | Участники, роли `employee`/`client` и, если есть, `employee_id` |
 | `cleaned_text` | непустая строка, да | Текст с разметкой ролей для GigaChat; отдельная колонка БД |
 | `utterances` | массив, да | Структурные реплики для будущего аудио-анализа: порядок, роль, текст, нормализованный текст, начало/конец в мс, необязательные эмоции/слова |
 | `source_metadata` | объект, нет | Метаданные Data Cleaner |
@@ -72,10 +71,6 @@ Content-Type: application/json
   "duration_seconds": 90,
   "occurred_at": "2026-11-06T12:30:00Z",
   "channel": "phone",
-  "participants": [
-    {"role": "employee", "name": "Иван Иванов", "employee_id": "00000001"},
-    {"role": "client", "name": "Петров Пётр Петрович"}
-  ],
   "cleaned_text": "Сотрудник: Здравствуйте. Клиент: Я хочу закрыть счёт и уйти в другой банк.",
   "utterances": [
     {"sequence_number": 1, "speaker_role": "employee", "text": "Здравствуйте.", "normalized_text": "Здравствуйте.", "start_ms": 0, "end_ms": 1000},

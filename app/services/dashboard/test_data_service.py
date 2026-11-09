@@ -145,7 +145,6 @@ class DashboardTestDataService:
         cleaned_text = "Сотрудник: тестовый звонок. Клиент: тестовый ответ."
         source_payload = {
             "channel": "phone",
-            "participants": [],
             "utterances": [],
             "source_metadata": {"fixtureScenario": request.scenario},
         }

@@ -72,6 +72,7 @@ class PromptLoader:
                 exclude={
                     "penalty",
                     "severity",
+                    "risk_level",
                     "recommendation",
                 },
                 mode="json",
