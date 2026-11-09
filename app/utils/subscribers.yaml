@@ -1,0 +1,14 @@
+subscribers:
+  - name: ai_q_score
+    contract: ai_q_score
+    enabled_env: AI_Q_SCORE_CALLBACK_ENABLED
+    url_env: AI_Q_SCORE_CALLBACK_URL
+  - name: call_summarization
+    contract: call_summarization
+    enabled_env: CALL_SUMMARIZATION_CALLBACK_ENABLED
+    url_env: CALL_SUMMARIZATION_CALLBACK_URL
+  - name: ai_mentor_insight
+    contract: ai_mentor_insight
+    enabled_env: AI_MENTOR_INSIGHT_CALLBACK_ENABLED
+    url_field: callback_url
+    append_call_id: true
