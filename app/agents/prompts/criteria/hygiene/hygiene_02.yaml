@@ -1,0 +1,16 @@
+code: HYG_02
+title_positive: Приветствие
+title_negative: Приветствие отсутствует
+description: Менеджер не поздоровался в начале звонка.
+rules: Любой входящий или исходящий звонок.
+trigger: Старт разговора без «Здравствуйте/Добрый день…».
+positive_definition: Есть корректное приветствие в первой реплике менеджера.
+negative_definition: Старт разговора без «Здравствуйте/Добрый день…».
+good_examples: []
+bad_examples: []
+output_rule: Старт разговора без «Здравствуйте/Добрый день…».
+block: hygiene
+severity: minor
+penalty: 2
+quote_required: true
+recommendation: Начинайте коммуникацию с краткого вежливого приветствия.

@@ -1,0 +1,16 @@
+code: HYG_14
+block: hygiene
+title_positive: Отработка жалоб
+title_negative: Жалоба обработана некорректно
+description: Менеджер защищается или не воспринимает жалобу всерьез.
+rules: Когда клиент жалуется или выражает претензию.
+trigger: Оправдания, спор, отрицание проблемы.
+positive_definition: Менеджер принимает жалобу, признает неудобство и предлагает шаги.
+negative_definition: Оправдания, спор, отрицание проблемы.
+good_examples: []
+bad_examples: []
+output_rule: Оправдания, спор, отрицание проблемы.
+severity: significant
+penalty: 5
+quote_required: true
+recommendation: При жалобе сначала признавайте неудобство и фиксируйте действия по решению.

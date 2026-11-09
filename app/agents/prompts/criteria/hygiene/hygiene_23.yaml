@@ -1,0 +1,16 @@
+code: HYG_23
+block: hygiene
+title_positive: Корректность формы обращения
+title_negative: Форма обращения не соблюдена
+description: Менеджер продолжает общаться не в согласованной форме «ты/вы».
+rules: Когда клиент явно обозначил форму обращения.
+trigger: Игнорируется просьба общаться на «вы/ты».
+positive_definition: Менеджер подстраивает форму обращения под просьбу клиента.
+negative_definition: Игнорируется просьба общаться на «вы/ты».
+good_examples: []
+bad_examples: []
+output_rule: Игнорируется просьба общаться на «вы/ты».
+severity: minor
+penalty: 2
+quote_required: true
+recommendation: После просьбы клиента сразу перестраивайте форму обращения.

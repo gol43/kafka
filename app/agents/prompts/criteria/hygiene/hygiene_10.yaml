@@ -1,0 +1,16 @@
+code: HYG_10
+block: hygiene
+title_positive: Корректность сравнения с конкурентами
+title_negative: Конкуренты оценены некорректно
+description: Менеджер негативно отзывается о конкурентах.
+rules: Если в разговоре упоминаются другие игроки рынка.
+trigger: Оценочные негативные высказывания о конкурентах.
+positive_definition: Корректное сравнение по параметрам без негатива.
+negative_definition: Оценочные негативные высказывания о конкурентах.
+good_examples: []
+bad_examples: []
+output_rule: Оценочные негативные высказывания о конкурентах.
+severity: significant
+penalty: 5
+quote_required: true
+recommendation: Сравнивайте предложения по фактам, не критикуя конкурентов.

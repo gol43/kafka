@@ -1,0 +1,16 @@
+code: HYG_11
+block: hygiene
+title_positive: Структурированность разговора
+title_negative: Разговор не структурирован
+description: Разговор прыгает между темами без логики и последовательности.
+rules: Любой содержательный звонок.
+trigger: Нет логики «уточнение → решение → следующий шаг».
+positive_definition: Есть понятная структура и переходы между блоками.
+negative_definition: Нет логики «уточнение → решение → следующий шаг».
+good_examples: []
+bad_examples: []
+output_rule: Нет логики «уточнение → решение → следующий шаг».
+severity: minor
+penalty: 2
+quote_required: true
+recommendation: 'Стройте разговор последовательно: запрос, решение, итог, следующий шаг.'

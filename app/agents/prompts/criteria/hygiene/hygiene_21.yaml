@@ -1,0 +1,16 @@
+code: HYG_21
+block: hygiene
+title_positive: Учет опыта клиента
+title_negative: Опыт клиента не учтен
+description: Опытному клиенту объясняют как новичку или наоборот.
+rules: Когда из контекста виден опыт/уровень клиента.
+trigger: Слишком базовое или слишком сложное объяснение.
+positive_definition: Объяснение соответствует уровню экспертизы клиента.
+negative_definition: Слишком базовое или слишком сложное объяснение.
+good_examples: []
+bad_examples: []
+output_rule: Слишком базовое или слишком сложное объяснение.
+severity: minor
+penalty: 2
+quote_required: true
+recommendation: Учитывайте опыт клиента и адаптируйте уровень объяснения.
